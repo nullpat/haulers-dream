@@ -425,9 +425,9 @@ namespace HaulersDream
             // keeps the full trip budget.
             //
             // The clamp is ONE-DIRECTIONAL — applied as a min against massLeft, so it can only ever make THIS trip
-            // smaller, never larger and never fewer trips (issue #167, reopened). That is why the asker's own trip
-            // budget goes IN as well: a remainder that already fits in one trip must not be divided, or the pawn
-            // comes back for the rest, re-divides the smaller remainder, and each trip carries less than the last.
+            // smaller, never larger and never fewer trips (issue #167, reopened). That is why an honest one-trip
+            // size goes IN as well: a remainder that already fits in one trip must not be divided, or the pawn comes
+            // back for the rest, re-divides the smaller remainder, and each trip carries less than the last.
             if (!playerOrder)
             {
                 int coLoaders = CountClaimlessCoLoaders(pawn, loadable, entry);
@@ -440,10 +440,35 @@ namespace HaulersDream
                     // min(distance, thingIDNumber) over the WHOLE pool each step, which is order-independent.
                     pool.Sort(ByThingId);
                     float claimableMass = ClaimablePoolMass(pawn, pool, claimable, claimedByOthers, out float heaviestUnit);
-                    // massLeft is still the untouched trip budget here (nothing has been committed yet), so it is
-                    // exactly "what this asker can move in one trip" — the term ShareMassBudget needs to decide
-                    // whether the pool is worth dividing at all.
-                    float share = LoadFairShare.ShareMassBudget(claimableMass, heaviestUnit, 1 + coLoaders, massLeft);
+
+                    // What this asker can move in ONE trip — the term ShareMassBudget needs to decide whether the
+                    // pool is worth dividing at all. massLeft is still the untouched trip budget here (nothing has
+                    // been committed yet), so it IS that number, unless it is the unbounded sentinel.
+                    //
+                    // Issue #243: at smart-overload level 0 ("carry freely") the ceiling is +Infinity, so pawnFree
+                    // above is float.MaxValue, and on a destination with no mass cap — a cave exit — so is massLeft.
+                    // The policy's "already fits in one trip" rule is gated on a REAL bound, so an unbounded budget
+                    // skipped it entirely: every ordered pawn re-divided the shrinking remainder trip after trip
+                    // until the no-starvation floor bottomed out at a single unit, and a crew told to leave a cave
+                    // with the loot carried insect jelly one piece at a time. A pawn with no CEILING still makes
+                    // TRIPS, and its honest one-trip size is a FULL PACK.
+                    //
+                    // Do NOT subtract what the pawn already carries. A first attempt used `baseCap - running`, which
+                    // collapses to 0 for an ordinarily-geared colonist — `running` counts worn apparel and equipment,
+                    // and MassUtility.Capacity is BodySize * 35, so plate armour plus a thump cannon is already a
+                    // human's entire 35 kg. A 0 budget skips the fit-in-one-trip rule exactly as the unbounded
+                    // sentinel did, putting this very bug back for that pawn, permanently — gear is never deposited,
+                    // so it does not self-correct between trips. What a pawn is already carrying cannot shrink a trip
+                    // it has no ceiling for. (baseCap is provably > 0 whenever the sentinel fires: CeilingKg returns
+                    // 0, not +Infinity, for a non-positive base capacity.)
+                    //
+                    // Only the DECISION input is made finite. massLeft itself stays unbounded, so a pawn that is not
+                    // clamped still carries as much as it likes — and any configuration whose trip budget is already
+                    // a real number (any bounded ceiling; any mass-capped destination) passes exactly what it passed
+                    // before, so nothing outside the uncapped case changes.
+                    float askerTripKg = LoadFairShare.AskerTripBudgetKg(massLeft, baseCap);
+
+                    float share = LoadFairShare.ShareMassBudget(claimableMass, heaviestUnit, 1 + coLoaders, askerTripKg);
                     if (share < massLeft)
                         massLeft = share;
                 }

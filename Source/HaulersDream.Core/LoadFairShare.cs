@@ -19,8 +19,9 @@ namespace HaulersDream.Core
     /// make a trip SMALLER. It can never make one bigger, and it can never make the crew finish in fewer trips than
     /// the asker would have taken alone. Two rules follow, and BOTH exist because breaking either one costs real
     /// trips: (1) a remainder that already fits in ONE trip must never be divided — splitting it only converts one
-    /// full trip into N partial ones; (2) a pawn that is not actually going to load this manifest must never be part
-    /// of the divisor, because every phantom peer shrinks a real hauler's trip for nothing.</para>
+    /// full trip into N partial ones, and an asker with NO trip bound fits everything, so it is never divided at all
+    /// (issue #243); (2) a pawn that is not actually going to load this manifest must never be part of the divisor,
+    /// because every phantom peer shrinks a real hauler's trip for nothing.</para>
     ///
     /// <para>What breaking those rules looked like: a reporter with exactly ONE able hauler mech and 33 units to load
     /// watched it carry 9 units, then 8, then 5, 4, 3, 2, 2, 2, 2, 1 — ten trips (with an all-but-empty pack on most
@@ -33,10 +34,35 @@ namespace HaulersDream.Core
     public static class LoadFairShare
     {
         /// <summary>
+        /// The finite, honest "how much is one trip for this asker?" figure to hand <see cref="ShareMassBudget"/>,
+        /// derived from the runtime's own trip budget.
+        ///
+        /// <para>The runtime budget is normally a real number and passes straight through. It arrives as the
+        /// unbounded sentinel only when the pawn has NO carry ceiling (smart overload at "carry freely") AND the
+        /// destination imposes no mass cap — a cave exit or other map portal. A pawn with no ceiling still makes
+        /// TRIPS, and the size of one is a full pack.</para>
+        ///
+        /// <para>Deliberately does NOT subtract what the pawn is already carrying. That subtraction collapses to
+        /// zero for an ordinarily-geared colonist — carried mass counts worn apparel and equipment, and a human's
+        /// whole capacity is 35 kg — and a zero budget skips the fit-in-one-trip rule exactly as the sentinel did,
+        /// reinstating the one-item-per-trip bug for that pawn permanently, since gear is never deposited. What a
+        /// pawn already carries cannot shrink a trip it has no ceiling for.</para>
+        /// </summary>
+        /// <param name="runtimeTripBudgetKg">The planner's own per-trip mass budget; the unbounded sentinel
+        /// (<see cref="float.MaxValue"/> or infinity) when the pawn has no ceiling and the destination no cap.</param>
+        /// <param name="baseCapacityKg">One normal packful for this pawn, before any overload multiplier. Positive
+        /// whenever the sentinel can occur (a non-positive base capacity yields a zero ceiling, never an infinite
+        /// one), so the result is a usable bound rather than another zero.</param>
+        /// <returns>The runtime budget unchanged, or one full pack in place of the sentinel.</returns>
+        public static float AskerTripBudgetKg(float runtimeTripBudgetKg, float baseCapacityKg)
+            => runtimeTripBudgetKg >= float.MaxValue ? baseCapacityKg : runtimeTripBudgetKg;
+
+        /// <summary>
         /// The mass budget one asker's claim may cover: the claimable pool mass divided evenly across the loaders,
         /// floored to one HEAVIEST unit so every single claimable item always fits inside one share (no starvation
         /// while unclaimed goods remain, and no item orphaned because every share is smaller than it) — but NOT
-        /// divided at all when the whole pool already fits inside the asker's own single trip.
+        /// divided at all when the whole pool already fits inside the asker's own single trip, nor when the asker
+        /// has no per-trip bound for it to fit inside.
         /// </summary>
         /// <param name="claimableMassKg">Total mass (kg) of what THIS asker could claim right now: pool stacks of
         /// claimable defs, each counted up to the def's remaining claimable units. At most 0 when everything left is
@@ -55,12 +81,17 @@ namespace HaulersDream.Core
         /// manifest is the whole of issue #167.</param>
         /// <param name="askerTripBudgetKg">What the ASKER itself can move in ONE trip (kg): the very budget the
         /// caller is about to clamp with the returned share (its carry headroom, tightened by any destination mass
-        /// cap). Pass an unbounded value — <see cref="float.MaxValue"/> (what an uncapped smart-overload ceiling
-        /// produces) or <see cref="float.PositiveInfinity"/> — when the asker has no real per-trip bound.</param>
+        /// cap). Must be a REAL number of kilograms — a pawn with no carry CEILING still makes trips, so the caller
+        /// converts that case into an honest one-pack figure before asking (see <c>TransportLoad.TryGiveBulkJob</c>).
+        /// The unbounded sentinels — <see cref="float.MaxValue"/> from an uncapped smart-overload ceiling,
+        /// <see cref="float.PositiveInfinity"/> from an uncapped destination — are handled only as a fail-safe, and
+        /// mean no clamp at all. A malformed value (NaN, zero, negative) is NOT unbounded: it simply never
+        /// short-circuits, so a nonsense number can never widen a claim.</param>
         /// <returns><see cref="float.PositiveInfinity"/> when no clamp applies, else
         /// <c>max(claimableMassKg / loaderCount, heaviestUnitMassKg)</c>. No clamp applies when: the asker is alone
-        /// (a lone loader keeps today's exact behavior); the pool has nothing measurable to divide; or the whole
-        /// claimable pool already fits inside <paramref name="askerTripBudgetKg"/>.</returns>
+        /// (a lone loader keeps today's exact behavior); the pool has nothing measurable to divide; the asker has no
+        /// real per-trip bound at all; or the whole claimable pool already fits inside
+        /// <paramref name="askerTripBudgetKg"/>.</returns>
         public static float ShareMassBudget(float claimableMassKg, float heaviestUnitMassKg, int loaderCount,
             float askerTripBudgetKg)
         {
@@ -75,20 +106,37 @@ namespace HaulersDream.Core
             if (claimableMassKg <= 0f)
                 return float.PositiveInfinity;
 
-            // A REAL per-trip bound, as opposed to the two "unbounded" sentinels the runtime can hand over: an
-            // uncapped smart-overload ceiling (level 0) arrives as float.MaxValue, and an uncapped destination as
-            // positive infinity. NaN fails both comparisons, so a malformed budget also declines to short-circuit.
-            bool askerTripIsBounded = askerTripBudgetKg > 0f && askerTripBudgetKg < float.MaxValue;
+            // NO REAL PER-TRIP BOUND — never clamp (issue #243). Two sentinels mean "this asker has no ceiling":
+            // float.MaxValue (smart overload at level 0, "carry freely") and positive infinity (an uncapped
+            // destination). PositiveInfinity >= MaxValue, so the one comparison catches both, while NaN fails it —
+            // malformed is not unbounded. Such an asker clears ANY pool in one trip, which is the rule below taken
+            // to its limit, so the answer is the same: don't divide. The caller now converts an unbounded ceiling
+            // into an honest one-pack figure before asking, so a sentinel reaching here is a CALLER bug — and
+            // declining to clamp is the only safe way to fail it: for a lone or unbounded asker Hauler's Dream must
+            // never move less per trip than vanilla, and vanilla hand-carries a whole stack with no mass term at
+            // all. (For a genuine multi-pawn crew a single pawn's trip CAN be smaller than vanilla's — the crew
+            // clears the pool together in one round — so this is a bound on the lone/unbounded case, not on every
+            // trip.)
+            //
+            // This replaces the opposite rule, which excluded the unbounded case so that one pawn could not
+            // "swallow the manifest and idle its peers". That reasoning was simply wrong: the caller applies this
+            // result as a MIN against the same budget, so declining to clamp can never let a pawn carry past its
+            // own capacity — and one pawn clearing the order in a single trip beats four pawns making nineteen
+            // ever-shrinking ones. What the exclusion actually produced: with no ceiling the short-circuit below
+            // was unreachable, the share decayed on every trip, and the no-starvation floor bottomed that decay
+            // out at exactly ONE item per trip — colonists ordered out of a cave with the loot carrying insect
+            // jelly one piece at a time, the same decay #167's short-circuit exists to end.
+            if (askerTripBudgetKg >= float.MaxValue)
+                return float.PositiveInfinity;
 
             // NEVER split a remainder one trip can already clear. The caller uses this result as a MIN against that
             // same trip budget, so declining to clamp here can never let a pawn carry more than its own capacity —
             // while clamping can only make its trip smaller. Dividing a pool that already fits therefore buys
             // nothing and costs trips: the asker comes back for the rest, re-divides the (now smaller) remainder,
             // and each round trip carries less than the last, down to a single item in an otherwise empty pack.
-            // The unbounded case is deliberately excluded: an asker with no trip bound could swallow ANY pool in one
-            // trip, so short-circuiting there would hand the entire manifest to whoever asks first and leave its
-            // peers idle — the exact concentration this clamp exists to stop.
-            if (askerTripIsBounded && claimableMassKg <= askerTripBudgetKg)
+            // A nonsense budget (NaN, zero, negative) fails the positive test and falls through to the plain
+            // division, unchanged — only a real, positive number of kilograms may skip the split.
+            if (askerTripBudgetKg > 0f && claimableMassKg <= askerTripBudgetKg)
                 return float.PositiveInfinity;
 
             float share = claimableMassKg / loaderCount;

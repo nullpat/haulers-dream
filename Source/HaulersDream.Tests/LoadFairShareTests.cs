@@ -23,6 +23,13 @@ namespace HaulersDream.Tests
     /// turned two trips into ten shipped green. One HD job is one TRIP, so <see cref="RunTripsToCompletion"/> now
     /// runs a whole load the way the game does: ask, clamp, sweep, DELIVER (the ledger settles and the ground pool
     /// shrinks), repeat. The trip-by-trip sizes it returns are what the reporter was actually counting.</para>
+    ///
+    /// <para>BUDGET COVERAGE (issue #243). Those multi-trip oracles then all fed a FINITE trip budget with a
+    /// divisor of 1, so the case where the asker has NO carry ceiling — smart overload at "carry freely", where the
+    /// planner's budget is an unbounded sentinel — was never exercised, and a policy that split it into one item
+    /// per trip shipped green a second time. The oracles now sweep both sentinels against real crews, and
+    /// <see cref="OnceTheRestFitsOneTrip_ItGoesInOneTrip"/> states the rule underneath both reports in one
+    /// sentence.</para>
     /// </summary>
     [TestFixture]
     public class LoadFairShareTests
@@ -82,17 +89,111 @@ namespace HaulersDream.Tests
             // A pool bigger than one trip is a genuine crew job again: split it.
             Assert.That(LoadFairShare.ShareMassBudget(30f, 5f, 4, 20f), Is.EqualTo(7.5f));
 
-            // The UNBOUNDED sentinels must still split. An uncapped smart-overload ceiling (level 0) reaches the
-            // planner as float.MaxValue and an uncapped destination as infinity; an asker with no trip bound could
-            // swallow ANY manifest in one trip, so short-circuiting there would hand it the lot and idle its peers —
-            // the concentration this clamp exists to stop.
-            Assert.That(LoadFairShare.ShareMassBudget(30f, 5f, 4, float.MaxValue), Is.EqualTo(7.5f));
-            Assert.That(LoadFairShare.ShareMassBudget(30f, 5f, 4, Inf), Is.EqualTo(7.5f));
+            // The UNBOUNDED sentinels are the same rule taken to its limit: an asker with no per-trip bound fits
+            // EVERYTHING in one trip, so nothing may be divided (issue #243). An uncapped smart-overload ceiling
+            // ("carry freely") reaches the planner as float.MaxValue and an uncapped destination as infinity.
+            //
+            // These two used to assert 7.5f — the old rule split an unbounded budget deliberately, reasoning that
+            // such an asker would otherwise swallow the manifest and idle its peers. It cannot: the caller applies
+            // this share as a MIN against the same budget, so declining to clamp never adds a gram of capacity,
+            // while splitting cost a reporter nineteen trips that ended in one insect jelly each.
+            Assert.That(LoadFairShare.ShareMassBudget(30f, 5f, 4, float.MaxValue), Is.EqualTo(Inf));
+            Assert.That(LoadFairShare.ShareMassBudget(30f, 5f, 4, Inf), Is.EqualTo(Inf));
+            // However big the pool: unbounded is unbounded.
+            Assert.That(LoadFairShare.ShareMassBudget(9000f, 5f, 4, float.MaxValue), Is.EqualTo(Inf));
 
-            // A nonsense budget never short-circuits either (no NaN or non-positive value reaches a claim decision).
+            // A nonsense budget is NOT unbounded — it never short-circuits, so no NaN or non-positive value can
+            // widen a claim, exactly as before.
             Assert.That(LoadFairShare.ShareMassBudget(30f, 5f, 4, float.NaN), Is.EqualTo(7.5f));
             Assert.That(LoadFairShare.ShareMassBudget(30f, 5f, 4, 0f), Is.EqualTo(7.5f));
             Assert.That(LoadFairShare.ShareMassBudget(30f, 5f, 4, -12f), Is.EqualTo(7.5f));
+        }
+
+        /// <summary>
+        /// The substitution the planner performs before asking for a share. A first version subtracted what the
+        /// pawn already carried, which is zero-or-negative for an ordinarily-geared colonist — carried mass counts
+        /// worn apparel and equipment, and a human's whole capacity is 35 kg, so plate armour plus a thump cannon
+        /// exhausts it. That produced a 0 budget, which skips the fit-in-one-trip rule exactly as the unbounded
+        /// sentinel did and reinstated the one-item-per-trip bug for every armoured pawn, permanently — gear is
+        /// never deposited, so nothing corrects it between trips.
+        /// </summary>
+        [Test]
+        public void AskerTripBudget_SubstitutesAFullPack_ForTheUnboundedSentinel()
+        {
+            // A real budget passes straight through, whatever the pack size.
+            Assert.That(LoadFairShare.AskerTripBudgetKg(12.5f, 35f), Is.EqualTo(12.5f));
+            Assert.That(LoadFairShare.AskerTripBudgetKg(0.25f, 35f), Is.EqualTo(0.25f));
+
+            // Both unbounded sentinels become one full pack — NOT the pack minus what is already carried.
+            Assert.That(LoadFairShare.AskerTripBudgetKg(float.MaxValue, 35f), Is.EqualTo(35f));
+            Assert.That(LoadFairShare.AskerTripBudgetKg(float.PositiveInfinity, 35f), Is.EqualTo(35f));
+
+            // The result must be usable by ShareMassBudget: positive, so the fit-in-one-trip rule is reachable.
+            float budget = LoadFairShare.AskerTripBudgetKg(float.MaxValue, 35f);
+            Assert.That(budget, Is.GreaterThan(0f), "a substituted budget must be a REAL bound, not another skip");
+            Assert.That(LoadFairShare.ShareMassBudget(5f, 0.025f, 4, budget), Is.EqualTo(float.PositiveInfinity),
+                "a heavily-geared pawn ordered out of a cave must still clear a 5 kg remainder in one trip");
+        }
+
+        /// <summary>
+        /// The planner feeds TWO different budgets: the substituted one to the share DECISION, and the raw
+        /// (possibly unbounded) one to the CLAMP. Every other oracle here passes a single value to both roles, so
+        /// a divergence between them is invisible to them — which is exactly where the armoured-pawn regression
+        /// lived (decision 0, clamp unbounded). Pin the divergence directly.
+        /// </summary>
+        [Test]
+        public void DecisionBudgetOfZero_WouldReinstateTheSplit_SoTheSubstitutionMustNotProduceOne()
+        {
+            const float PoolKg = 5f;      // 200 insect jelly at 0.025 kg
+            const float HeaviestKg = 0.025f;
+            const int Divisor = 4;        // a crew of four ordered out of the cave
+
+            // The shape the regression had: a zero decision budget alongside an unbounded clamp budget.
+            float bad = LoadFairShare.ShareMassBudget(PoolKg, HeaviestKg, Divisor, 0f);
+            Assert.That(bad, Is.EqualTo(PoolKg / Divisor),
+                "a zero decision budget still divides — which is why the substitution may never yield zero");
+
+            // What the planner actually produces for that pawn, however much gear it is wearing.
+            float good = LoadFairShare.ShareMassBudget(
+                PoolKg, HeaviestKg, Divisor, LoadFairShare.AskerTripBudgetKg(float.MaxValue, 35f));
+            Assert.That(good, Is.EqualTo(float.PositiveInfinity), "no clamp: the remainder fits one pack");
+        }
+
+        /// <summary>
+        /// The whole cave-exit load, driven with the TWO budgets the runtime really feeds — a substituted finite
+        /// decision budget and an unbounded clamp budget — rather than one value standing in for both.
+        ///
+        /// <para>This is the oracle that was missing. The single-budget runs hand the raw sentinel to the share
+        /// rule and so never exercise the substitution at all; both times this bug shipped, the rule was right and
+        /// the ARGUMENT was wrong, which no single-budget oracle can see. Here the decision budget is produced by
+        /// the same Core method the planner calls, so reinstating either historical mistake fails this test.</para>
+        /// </summary>
+        [Test]
+        public void CaveExit_WithTheRuntimesTwoBudgets_ClearsTheOrderInOneTrip()
+        {
+            const int Total = 200;            // insect jelly
+            const float UnitMass = 0.025f;
+            const int Divisor = 4;            // a crew of four ordered out
+            const float PackKg = 35f;         // one ordinary human packful
+
+            // What the planner computes for a pawn with no carry ceiling, however much gear it is wearing.
+            float decision = LoadFairShare.AskerTripBudgetKg(float.MaxValue, PackKg);
+
+            var sim = Sim.FromPool(new Stack("jelly", Total, UnitMass));
+            var trips = RunTripsToCompletion(sim, asker: 1, divisor: Divisor,
+                decisionBudgetKg: decision, clampBudgetKg: float.MaxValue);
+
+            Assert.That(trips, Is.EqualTo(new[] { Total }),
+                "an unbounded pawn must clear the order in one trip, not shuttle it a few units at a time");
+
+            // And the historical failure shapes, driven through the same simulation, to keep the oracle honest
+            // about what it is protecting against.
+            var zeroDecision = RunTripsToCompletion(Sim.FromPool(new Stack("jelly", Total, UnitMass)),
+                asker: 1, divisor: Divisor, decisionBudgetKg: 0f, clampBudgetKg: float.MaxValue);
+            Assert.That(zeroDecision.Count, Is.GreaterThan(1),
+                "sanity: a zero decision budget is the geared-pawn regression and DOES split");
+            Assert.That(zeroDecision, Has.Some.EqualTo(1),
+                "sanity: and it decays all the way to single units — the reported symptom");
         }
 
         // ============ CountsAsCoLoader (who may shrink someone else's trip) ============
@@ -254,6 +355,29 @@ namespace HaulersDream.Tests
             }
         }
 
+        /// <summary>
+        /// Spread one order over several ground stacks of the same def, so the sweep has to fill ACROSS stacks
+        /// rather than out of a single tidy pile. The last stack takes whatever is left, so the units always sum to
+        /// <paramref name="total"/>.
+        /// </summary>
+        /// <param name="total">Units in the whole order; at least 1.</param>
+        /// <param name="unitMass">Mass of one unit, kg — the same for every stack, so the mass and unit views of a
+        /// trip stay interchangeable in the oracles.</param>
+        /// <param name="stackCount">How many piles to spread it over; a count past <paramref name="total"/> simply
+        /// runs out of units early.</param>
+        private static Stack[] SplitIntoStacks(int total, float unitMass, int stackCount)
+        {
+            var stacks = new List<Stack>();
+            int spread = total;
+            for (int i = 0; i < stackCount && spread > 0; i++)
+            {
+                int units = (i == stackCount - 1) ? spread : Math.Max(1, spread / (stackCount - i));
+                stacks.Add(new Stack("cargo", units, unitMass));
+                spread -= units;
+            }
+            return stacks.ToArray();
+        }
+
         // The runtime's fair-share mass pre-pass: pool stacks of claimable defs, counted up to the per-def
         // claimable units (decrementing so over-supply never inflates), heaviest counted unit reported for the floor.
         private static float ClaimableMass(Sim sim, Dictionary<string, int> available, out float heaviest)
@@ -332,11 +456,27 @@ namespace HaulersDream.Tests
         /// <param name="divisor">The fair-share divisor for every round — 1 + the co-loaders
         /// <see cref="LoadFairShare.CountsAsCoLoader"/> accepts. Held constant because the bystanders it counts
         /// never claim anything, which is exactly the reported situation.</param>
-        /// <param name="tripBudgetKg">What the asker can carry in one trip (kg).</param>
+        /// <param name="tripBudgetKg">What the asker can carry in one trip (kg) — the CLAMP budget.</param>
         /// <returns>Units carried per trip, in order. Stops when nothing is claimable or a trip would be empty; a
         /// hard round cap keeps a regression from hanging the suite rather than failing it (the caller asserts the
         /// whole order was delivered, so hitting the cap fails).</returns>
         private static List<int> RunTripsToCompletion(Sim sim, int asker, int divisor, float tripBudgetKg)
+            => RunTripsToCompletion(sim, asker, divisor, tripBudgetKg, tripBudgetKg);
+
+        /// <summary>
+        /// The same simulation, but with the two budgets the RUNTIME actually feeds kept separate: a substituted,
+        /// finite <paramref name="decisionBudgetKg"/> for the share decision, and the raw (possibly unbounded)
+        /// <paramref name="clampBudgetKg"/> for the clamp.
+        ///
+        /// <para>Every single-budget oracle here is blind to a divergence between those two, which is exactly where
+        /// the one-item-per-trip bug lived BOTH times it shipped: first as an unreachable rule when the decision
+        /// budget was the unbounded sentinel, then as a zero decision budget for a geared pawn while the clamp
+        /// budget stayed unbounded. The rule itself was correct in both cases; the argument was not.</para>
+        /// </summary>
+        /// <param name="decisionBudgetKg">What the planner tells the share rule one trip is worth.</param>
+        /// <param name="clampBudgetKg">What actually bounds the trip once the share is known.</param>
+        private static List<int> RunTripsToCompletion(Sim sim, int asker, int divisor,
+            float decisionBudgetKg, float clampBudgetKg)
         {
             var trips = new List<int>();
             for (int round = 0; round < 500; round++)
@@ -345,8 +485,8 @@ namespace HaulersDream.Tests
                 if (available.Count == 0)
                     break;
                 float mass = ClaimableMass(sim, available, out float heaviest);
-                float share = LoadFairShare.ShareMassBudget(mass, heaviest, divisor, tripBudgetKg);
-                var plan = BuildPlan(sim, available, ClampedTripBudget(share, tripBudgetKg));
+                float share = LoadFairShare.ShareMassBudget(mass, heaviest, divisor, decisionBudgetKg);
+                var plan = BuildPlan(sim, available, ClampedTripBudget(share, clampBudgetKg));
                 int units = 0;
                 foreach (var kv in plan)
                     units += kv.Value;
@@ -479,16 +619,7 @@ namespace HaulersDream.Tests
                 Assert.That(divisor, Is.EqualTo(1), "no bystander that will never load may enter the divisor");
 
                 // Split the order over one to three ground stacks so the sweep has to fill across stacks.
-                int stackCount = rng.Next(1, 4);
-                var stacks = new List<Stack>();
-                int spread = total;
-                for (int i = 0; i < stackCount && spread > 0; i++)
-                {
-                    int units = (i == stackCount - 1) ? spread : Math.Max(1, spread / (stackCount - i));
-                    stacks.Add(new Stack("cargo", units, unitMass));
-                    spread -= units;
-                }
-                var sim = Sim.FromPool(stacks.ToArray());
+                var sim = Sim.FromPool(SplitIntoStacks(total, unitMass, rng.Next(1, 4)));
 
                 var trips = RunTripsToCompletion(sim, 1, divisor, tripBudget);
 
@@ -501,6 +632,121 @@ namespace HaulersDream.Tests
                     remaining -= carried;
                 }
                 Assert.That(remaining, Is.EqualTo(0), $"iteration {iteration}: the order was left unfinished");
+            }
+        }
+
+        [Test]
+        public void OrderedOutOfACave_NoCarryCeiling_ClearsTheOrderInOneTrip()
+        {
+            // Issue #243, to the unit. Four colonists are ordered to leave a cave and take the loot with them, so
+            // all four hold the load-and-enter duty and all four are honest co-loaders — the divisor really is 4,
+            // and nothing about the crew is wrong this time. What is unbounded is the PACK: smart overload sits at
+            // "carry freely", so the pawn has no carry ceiling, and a cave exit has no mass cap either, so the
+            // planner's trip budget arrives as the unbounded sentinel.
+            //
+            // 200 insect jelly at 0.025kg is 5kg — nothing at all for a pack with no ceiling, so it must go in ONE
+            // trip. Against the old policy the unbounded budget skipped the "already fits in one trip" rule
+            // entirely: the share decayed every round (50, 37, 28, 21, 16, 12, 9, 6, 5, 4, 3, 2) and then sat on
+            // the no-starvation floor at ONE jelly per trip for the last seven — nineteen trips, where vanilla
+            // hand-carries a full stack in one.
+            const int Total = 200;
+            const float UnitMass = 0.025f;
+
+            foreach (float unbounded in new[] { float.MaxValue, Inf })
+            {
+                var sim = Sim.FromPool(new Stack("jelly", Total, UnitMass));
+                var trips = RunTripsToCompletion(sim, 1, 4, unbounded);
+
+                Assert.That(trips, Is.EqualTo(new[] { Total }),
+                    $"budget {unbounded}: a pawn with no carry ceiling must clear the whole order in one trip");
+                Assert.That(trips, Has.None.EqualTo(1), $"budget {unbounded}: no trip may carry a single jelly");
+            }
+        }
+
+        [Test]
+        public void UnboundedPack_IsNeverSplit_WhateverTheCrewSize()
+        {
+            // The axis every oracle above misses, and the reason #243 shipped green: they all feed a FINITE budget
+            // with a divisor of 1. Sweep both unbounded sentinels (float.MaxValue from an uncapped smart-overload
+            // ceiling, infinity from an uncapped destination) against crews of one to five, over randomised orders,
+            // item masses and pile layouts. A pack with no bound fits everything from the first round, so every one
+            // of these runs is a single trip carrying the whole order — that is min(perTrip, remaining) when
+            // perTrip is unbounded — no matter how many peers share the divisor.
+            var unitMasses = new[] { 0.025f, 0.25f, 0.5f, 1f, 4f };
+            var rng = new Random(20260803);
+
+            foreach (float tripBudget in new[] { float.MaxValue, Inf })
+            {
+                for (int divisor = 1; divisor <= 5; divisor++)
+                {
+                    for (int iteration = 0; iteration < 40; iteration++)
+                    {
+                        int total = rng.Next(1, 400);
+                        float unitMass = unitMasses[rng.Next(unitMasses.Length)];
+                        var sim = Sim.FromPool(SplitIntoStacks(total, unitMass, rng.Next(1, 4)));
+
+                        var trips = RunTripsToCompletion(sim, 1, divisor, tripBudget);
+
+                        Assert.That(trips, Is.EqualTo(new[] { total }),
+                            $"budget {tripBudget}, divisor {divisor}, {total} x {unitMass}kg — an unbounded pack was split");
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void OnceTheRestFitsOneTrip_ItGoesInOneTrip()
+        {
+            // THE invariant, and the single statement that catches both #167 and #243: whenever what is left
+            // already fits inside one trip, the very next trip carries ALL of it. Both bugs are violations of
+            // exactly that — #167 rattled two-item and one-item trips around a pack that held nine, and #243 had an
+            // unbounded pack (into which everything fits, from the first round) delivering fifty, then thirty-seven,
+            // then one at a time. Swept here over every combination of pack size, crew size and budget kind, with
+            // conservation (nothing lost, nothing over-delivered) pinned alongside it.
+            //
+            // What is deliberately NOT asserted: that a crew never costs trips. Sharing a large order out DOES cost
+            // trips, by design — SingleEffectiveHauler_EveryTripIsFull_UntilOrderMet pins that a divisor of 3 needs
+            // more of them than a divisor of 1 — so the closed-form "ceil(order / pack) trips" only holds where
+            // sharing cannot bite: nobody to share with, or an unbounded pack that swallows the order whole. Both
+            // of those cases are checked; the invariant above is what covers the rest.
+            var unitMasses = new[] { 0.25f, 0.5f, 1f, 2f };
+            var rng = new Random(20260804);
+
+            for (int iteration = 0; iteration < 300; iteration++)
+            {
+                int total = rng.Next(1, 200);
+                float unitMass = unitMasses[rng.Next(unitMasses.Length)];
+                int packUnits = rng.Next(1, 30);
+                int divisor = rng.Next(1, 6);
+                int budgetKind = rng.Next(3);
+
+                // An unbounded pack holds the whole order, so its "units per trip" is the order itself.
+                float tripBudget = budgetKind == 0 ? packUnits * unitMass
+                    : budgetKind == 1 ? float.MaxValue : Inf;
+                int perTrip = budgetKind == 0 ? packUnits : total;
+
+                var sim = Sim.FromPool(SplitIntoStacks(total, unitMass, rng.Next(1, 4)));
+                var trips = RunTripsToCompletion(sim, 1, divisor, tripBudget);
+
+                string run = $"iteration {iteration}: {total} x {unitMass}kg, pack {perTrip}, " +
+                    $"divisor {divisor}, budget {tripBudget}";
+
+                int remaining = total;
+                foreach (int carried in trips)
+                {
+                    Assert.That(carried, Is.GreaterThan(0), $"{run} — an empty trip");
+                    Assert.That(carried, Is.LessThanOrEqualTo(Math.Min(perTrip, remaining)),
+                        $"{run} — a trip carried more than the pack or the order allowed");
+                    if (remaining <= perTrip)
+                        Assert.That(carried, Is.EqualTo(remaining),
+                            $"{run} — what was left fitted in one trip and was divided anyway");
+                    remaining -= carried;
+                }
+                Assert.That(remaining, Is.EqualTo(0), $"{run} — the order was not fully delivered");
+
+                if (divisor == 1 || budgetKind != 0)
+                    Assert.That(trips.Count, Is.EqualTo((total + perTrip - 1) / perTrip),
+                        $"{run} — more trips than the pack size demands");
             }
         }
 

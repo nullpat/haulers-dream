@@ -112,6 +112,22 @@
   <HaulersDream.Setting.HaulOversizedDesc>當單一堆疊太大而無法用雙手一次搬完時（例如 75 個鋼鐵的堆疊，而角色雙手只能拿 72 個），角色會將其放入背包並在一次行程中送達整個堆疊 — 而不是用雙手搬運部分數量並留下殘量。同時適用於手動指定與自動搬運；搬運量不會超過儲存區實際能容納的上限，因此絕不會有物品被遺棄。</HaulersDream.Setting.HaulOversizedDesc>
   <HaulersDream.Setting.BulkHaulCorpses>屍體搬運也像其他搬運一樣順手清掃、成批帶走</HaulersDream.Setting.BulkHaulCorpses>
   <HaulersDream.Setting.BulkHaulCorpsesDesc>RimWorld 以一個獨立的工作處理屍體搬運，而 Hauler's Dream 從未接手過它 — 因此對屍體下達搬運指令只會搬走屍體本身，而且屍體永遠一趟只取一具。開啟後，屍體搬運的行為與其他搬運完全相同：屍體周圍散落的物品會在同一趟中被掃進搬運者的背包，躺在另一次搬運旁邊的屍體也能順路帶走。實際能帶上多少仍由負重決定：類人屍體（約 60 公斤，而上限通常約 96 公斤）通常仍會獨佔一趟 — 受益的是小型動物，如今可以數隻一起帶回。自動剝除衣物不受影響：角色取走的每一具屍體，仍與用雙手搬運的屍體完全一樣被剝除衣物。</HaulersDream.Setting.BulkHaulCorpsesDesc>
+  <HaulersDream.Setting.CorpseCarryAllowance.Lab>屍體負重折算</HaulersDream.Setting.CorpseCarryAllowance.Lab>
+  <HaulersDream.Setting.CorpseCarryAllowance.Off>關閉（真實重量）</HaulersDream.Setting.CorpseCarryAllowance.Off>
+  <HaulersDream.Setting.CorpseCarryAllowance.Value>×{0}</HaulersDream.Setting.CorpseCarryAllowance.Value>
+  <HaulersDream.Setting.CorpseCarryAllowanceDesc>在計算單趟能帶走幾具屍體時，將屍體視為比實際更輕。類人屍體重 60 公斤，而一般殖民者的搬運上限約為 96 公斤，因此兩具永遠裝不下，死者總是一具一具地取回 — 這正是「我的殖民者一次只搬一具屍體」的答案。×2.0 會把一具屍體在這個上限中佔用的分量減半，於是原本只能搬一具的殖民者現在能帶回三具；×3.0 減為三分之一，就是四具。本就能搬兩具的搬運機械族還能走得更遠。調高之前請先看清這筆交易：改變的只是帳面，負重絲毫未減。殖民者扛起的是每一公斤真實重量 — 三具屍體就是實打實的 180 公斤，壓在一副自身僅 35 公斤的身軀上 — 因此他會被拖慢到本模組設定的最低速度，遠遠超出智慧超載認為划算的界線。您選擇的是一趟慢的，而不是好幾趟快的，這也是本項預設為關閉的原因。×1.0 不會改變任何事。</HaulersDream.Setting.CorpseCarryAllowanceDesc>
+  <HaulersDream.Setting.CorpseMaxHaulMass.Lab>可成批搬運的最重屍體</HaulersDream.Setting.CorpseMaxHaulMass.Lab>
+  <HaulersDream.Setting.CorpseMaxHaulMass.Off>無限制</HaulersDream.Setting.CorpseMaxHaulMass.Off>
+  <HaulersDream.Setting.CorpseMaxHaulMass.Value>{0} 公斤</HaulersDream.Setting.CorpseMaxHaulMass.Value>
+  <HaulersDream.Setting.CorpseMaxHaulMassDesc>只有重量不超過此值的屍體才會被併入批量搬運；更重的仍舊單獨搬運，與先前完全相同。可用它把幾具輕小的動物屍體一起帶回家，而沉重的仍舊一趟一具 — 類人屍體為 60 公斤，毛牛或崇高大角鹿則遠不止於此。設為 0 表示無限制（預設值）。</HaulersDream.Setting.CorpseMaxHaulMassDesc>
+  <HaulersDream.Setting.CorpseHaulHumanlike>將人的屍體納入批量搬運</HaulersDream.Setting.CorpseHaulHumanlike>
+  <HaulersDream.Setting.CorpseHaulHumanlikeDesc>預設為開啟。人的屍體 — 您的死者、訪客、掠奪者 — 會像其他屍體一樣被併入批量搬運。關閉它可讓人完全不參與成批搬運：無論上方的折算與重量上限如何設定，人都始終單獨搬運，而動物與機械族的屍體仍會一起帶回。適合希望自己的死者一具一具地安置、卻想把當天的獵獲一趟帶回的聚落。</HaulersDream.Setting.CorpseHaulHumanlikeDesc>
+  <HaulersDream.Setting.CorpseHaulByColonists>允許殖民者批量搬運屍體</HaulersDream.Setting.CorpseHaulByColonists>
+  <HaulersDream.Setting.CorpseHaulByColonistsDesc>預設為開啟。關閉它可把墓地這趟差事交給您的機械族或動物：殖民者仍會搬運屍體，但如同原版一趟只搬一具，也絕不會順路把其他屍體一併掃走。改變的只是成批與否 — 沒有人被禁止搬運。</HaulersDream.Setting.CorpseHaulByColonistsDesc>
+  <HaulersDream.Setting.CorpseHaulByMechs>允許工作機械族批量搬運屍體</HaulersDream.Setting.CorpseHaulByMechs>
+  <HaulersDream.Setting.CorpseHaulByMechsDesc>預設為開啟。屍體搬運屬於一般的搬運工作，因此專職搬運機械族本來就會做；它更大的負重能力意味著它能一趟帶回兩具人的屍體，而殖民者做不到。關閉此項後，機械族仍會搬運屍體，但如同原版一趟只搬一具，也絕不會順路把其他屍體一併掃走。改變的只是成批與否 — 沒有人被禁止搬運。它只能收窄：若「允許機械族拾取與搬運」為關閉，機械族無論如何都不參與。</HaulersDream.Setting.CorpseHaulByMechsDesc>
+  <HaulersDream.Setting.CorpseHaulByAnimals>允許受過搬運訓練的動物批量搬運屍體</HaulersDream.Setting.CorpseHaulByAnimals>
+  <HaulersDream.Setting.CorpseHaulByAnimalsDesc>預設為開啟。已接受「搬運」訓練的聚落動物會像收集一般戰利品那樣，把屍體併入批量搬運。若您寧願讓哈士奇們別去碰死者，就關閉它。它只能收窄：若「允許聚落動物拾取與搬運」為關閉，動物就絕不會批量搬運任何東西，屍體也不例外。</HaulersDream.Setting.CorpseHaulByAnimalsDesc>
   <HaulersDream.Setting.SweepNearbyWhileWorking>工作時順便清理 — 一併拾取附近的散落物品</HaulersDream.Setting.SweepNearbyWhileWorking>
   <HaulersDream.Setting.SweepNearbyWhileWorkingDesc>當角色在進行拆除、開採或收穫並拾取自身產物時，也會將工作點周圍其他散落的可搬運物品一併收入背包，從而在一次合併行程中清理整個區域，而不是留給後續獨立的搬運任務。僅會拿取需要搬運且有儲存區可存放的物品（絕不拿取其他搬運工的目標或已儲存的庫存），且上限不超過智慧超載門檻。</HaulersDream.Setting.SweepNearbyWhileWorkingDesc>
 
@@ -258,8 +274,10 @@
   <HaulersDream.Gizmo.AutoHaul>自動搬運產物</HaulersDream.Gizmo.AutoHaul>
   <HaulersDream.Gizmo.AutoHaulDesc>開啟時，此角色會在工作時自動拾取自己的工作產物並將周圍戰利品收集至背包。關閉時可停止此角色的自動搬運 — 角色仍會將當前已攜帶的任何物品存放好。</HaulersDream.Gizmo.AutoHaulDesc>
   <HaulersDream.Gizmo.BenchGather>收集原料</HaulersDream.Gizmo.BenchGather>
-  <HaulersDream.Gizmo.BenchGatherDescActive>角色在製作前會一次性將這個工作臺清單所需的原料收進背包。\n\n為這個工作臺關閉它，即可改用 RimWorld 自己的行為：角色一次只搬一堆直接送到工作臺，並立刻開始該清單。當原料本來就在工作臺旁邊時這樣更快，因為那次收集是一個獨立的工作 — 角色走回工作臺把它做完，要等到下一次尋找工作時才會重新接手這個清單。\n\n僅影響這個工作臺，並且同樣涵蓋批量製作：在這個工作臺上設為「批量」的清單會改成一次做一個。其他工作臺不受影響。</HaulersDream.Gizmo.BenchGatherDescActive>
+  <HaulersDream.Gizmo.BenchGatherDescActive>當由 Hauler's Dream 負責收集時，角色在製作前會一次性將這個工作臺清單所需的原料收進背包。\n\n為這個工作臺關閉它，即可改用 RimWorld 自己的行為：角色一次只搬一堆直接送到工作臺，並立刻開始該清單。當原料本來就在工作臺旁邊時這樣更快，因為那次收集是一個獨立的工作 — 角色走回工作臺把它做完，要等到下一次尋找工作時才會重新接手這個清單。\n\n僅影響這個工作臺，並且同樣涵蓋批量製作：在這個工作臺上設為「批量」的清單會改成一次做一個。其他工作臺不受影響。</HaulersDream.Gizmo.BenchGatherDescActive>
   <HaulersDream.Gizmo.BenchGatherDescInactive>角色不會將這個工作臺清單所需的原料收進背包。這個工作臺使用 RimWorld 自己的行為：角色一次只搬一堆直接送到工作臺並立刻開始該清單，當原料本來就在附近時這樣更快。\n\n這個工作臺的批量製作同樣關閉，因此在這裡設為「批量」的清單會一次做一個。\n\n重新開啟它即可讓角色再次一次性收集所有原料。僅影響這個工作臺。</HaulersDream.Gizmo.BenchGatherDescInactive>
+<HaulersDream.Notice.ForeignModGathers>目前是 {0} 在收集清單原料，而不是 Hauler's Dream。在該模組負責期間，Hauler's Dream 會完全讓位，它的任何收集選項——包含這一項——都無法改變你所看到的行為。若要停止收集，請關閉該模組自己的選項：「{1}」。</HaulersDream.Notice.ForeignModGathers>
+<HaulersDream.Notice.GatherOffGlobally>Hauler's Dream 自己的一次性收集已在模組選項中關閉（「{0}」），因此它不會在任何工作臺為一般製作清單收集原料。此按鈕仍然控制這裡的批次製作，以及將原料搬到更近處的繞行。</HaulersDream.Notice.GatherOffGlobally>
 
   <!-- Black-hole safety-net alert -->
   <HaulersDream.Alert.CannotUnload>無法卸載背包物品 ({0})</HaulersDream.Alert.CannotUnload>
@@ -383,7 +401,7 @@
 
   <!-- Settings: auto crafting-bill inventory delivery -->
   <HaulersDream.Setting.InventoryCraftDeliver>使用背包攜帶製作原料（減少往返次數）</HaulersDream.Setting.InventoryCraftDeliver>
-  <HaulersDream.Setting.InventoryCraftDeliverDesc>當角色開始執行需要來自兩個或更多不同堆疊原料的製作清單時，會先一次性將「所有」原料收集至背包中 — 必要時可超載並接受減速影響（除非已開啟嚴格負重） — 一次性走至工作臺並使用攜帶的原料進行製作。適用於所有配方，包含需先製作未完成物品的配方（服裝、武器、雕塑）。製作過程完全遵循原版機制，不會產生複製或遺失物品的情況。若有其他模組正在管理製作原料的搬運，Hauler's Dream 會自動讓位（改為收集原料），使任何製作迴圈自動解鎖。需要先開啟上方的「為製作清單使用攜帶的材料」設定。</HaulersDream.Setting.InventoryCraftDeliverDesc>
+  <HaulersDream.Setting.InventoryCraftDeliverDesc>當角色開始執行需要來自兩個或更多不同堆疊原料的製作清單時，會先一次性將「所有」原料收集至背包中 — 必要時可超載並接受減速影響（除非已開啟嚴格負重） — 一次性走至工作臺並使用攜帶的原料進行製作。適用於所有配方，包含需先製作未完成物品的配方（服裝、武器、雕塑）。製作過程完全遵循原版機制，不會產生複製或遺失物品的情況。若有其他模組正在管理製作原料的搬運，Hauler's Dream 會完全讓位，將收集原料交由該模組處理——使任何製作迴圈自動解鎖，而在此期間本設定對收集行為不會有任何作用。需要先開啟上方的「為製作清單使用攜帶的材料」設定。</HaulersDream.Setting.InventoryCraftDeliverDesc>
   <HaulersDream.Setting.ShowBenchGatherGizmo>顯示每個工作臺的「收集原料」按鈕</HaulersDream.Setting.ShowBenchGatherGizmo>
   <HaulersDream.Setting.ShowBenchGatherGizmoDesc>在每個工作臺的指令列上新增一個「收集原料」開關，讓你可以只關閉某一個工作臺的原料收集，改由 RimWorld 自己的一次一堆行為在那裡運作。適合那些你就在隔壁補貨的爐灶或工作臺 — 在那裡收集所花的時間比省下的還多。預設為開啟。這只控制按鈕是否顯示 — 你已經關閉的工作臺無論如何都保持關閉。關閉某個工作臺永遠優先於上方的設定，而且即使「以背包攜帶製作原料」已關閉它依然有效，因為批量製作無論該設定為何都會收集原料。</HaulersDream.Setting.ShowBenchGatherGizmoDesc>
 
