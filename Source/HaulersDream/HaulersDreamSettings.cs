@@ -117,6 +117,16 @@ namespace HaulersDream
         public bool medicineFromVehiclesAway = false;
         public bool buildFromVehiclesAway = false;
 
+        // --- KEPT-DRUG WITHDRAWAL ACCESS (issue #229). Every vanilla drug search is spawned-only or
+        // colony-ANIMAL-only, so a drug in a COLONIST's inventory is invisible to an addict — and HD pins one
+        // there permanently ("Keep in inventory" + the #81 drop guards), which vanilla never allows (its
+        // drop-unused loop sheds any drug a colonist has no reason to hold). This lets a colonist craving or
+        // withdrawing from a drug they're addicted to walk to a colleague and take a SINGLE dose, but only from
+        // stacks HD ITSELF pinned — a drug vanilla put in an inventory stays as unreachable as in vanilla, so the
+        // fix is scoped to the lockout HD created and rebalances nothing. Default ON: it undoes an HD-caused
+        // regression, not a vanilla rule. See Patch_JobGiver_SatisfyChemicalNeed.
+        public bool drugsForWithdrawal = true;
+
         // --- haul to stack (prefer topping up existing stacks; destination cells unreserved) ---
         public bool haulToStack = true;
 
@@ -200,6 +210,13 @@ namespace HaulersDream
         // in the INVENTORY and deliver the whole stack in one trip, instead of hand-carrying a partial load and
         // leaving the rest behind. Applies to ordered and automatic single-stack hauls alike.
         public bool haulOversizedInInventory = true;
+        // Let a CORPSE haul behave like any other haul: it can sweep the loose items around it into the hauler's
+        // inventory, and a nearby corpse can ride along on someone else's sweep. Vanilla routes corpses through a
+        // SEPARATE work giver that HD never hooked, so corpse hauls were the one haul the bulk sweep never touched
+        // — a haul ordered on a meal picked up the corpse next to it, but a haul ordered on the corpse picked up
+        // nothing else. Default ON, for parity with item hauls. Carry weight still decides how much rides along,
+        // so a 60 kg humanlike body is normally still a trip of its own; small animals batch. Requires bulkHaul.
+        public bool bulkHaulCorpses = true;
 
         // "Haul Urgently" bulk pickup (Allow Tool / Keyz' Allow Utilities soft-dep). When a pawn is sent to
         // haul an item marked "Haul Urgently", also pocket the OTHER urgent-marked stacks within a small radius
@@ -529,7 +546,12 @@ namespace HaulersDream
         // bulk-haul, the same way colonists do. Opt-in (default OFF) so the out-of-the-box scope stays
         // colonists + mechs; the eligibility branch + the animal think-tree haul redirect are gated on this.
         public bool allowAnimals = false;
-        public bool allowIncapable = false;   // let pawns incapable of hauling still scoop their own yields
+        // Let a pawn whose HAULING WORK TYPE is disabled ("incapable of dumb labor" and friends) take part in HD
+        // anyway. Governs both sides: the AUTOMATIC scoop of its own work results (EligibilityPolicy) and, since
+        // #229, HD's haul / load / refuel RIGHT-CLICK ORDERS (HaulOrderGate) — which used to check the
+        // WorkTags.Hauling bit a "dumb labor" backstory never sets, so they were offered regardless of this
+        // setting. Default OFF = vanilla, which greys "Prioritize hauling" out for such a pawn.
+        public bool allowIncapable = false;
 
         // --- per-category yield behavior (issue #79): each work-result category independently chooses Off /
         // Drop & haul / Straight-to-inventory. Default DropThenHaul for every category == the legacy behavior
@@ -552,13 +574,33 @@ namespace HaulersDream
         // fishing mechanic needs the Odyssey DLC).
         public YieldBehavior yieldFishing = YieldBehavior.DropThenHaul;     // fish catch (Odyssey fishing) — JobDriver_Fish
 
-        // Settings schema version, bumped when a one-time on-load migration is needed. 0 = pre-#79 (per-work bools
-        // + global pickupMode); 1 = the per-category yieldX model. The migration runs at most once (guarded on
-        // settingsSchemaVersion < 1) and then stamps this to CurrentSettingsSchema so it never re-runs. [ProfileMeta]:
-        // it is serialized plumbing, NOT a user-facing tunable, so the profile system must ignore it when comparing a
-        // config against the defaults (the on-load stamp to 1 would otherwise read a pristine config as "Custom").
-        [ProfileMeta] public int settingsSchemaVersion = 0;
+        // Settings schema version. 1 = the per-category yieldX model; "0" is not a real schema, it is the sentinel
+        // the LOAD path uses for "this node predates the stamp" (see the Scribe default below). [ProfileMeta]: it is
+        // serialized plumbing, NOT a user-facing tunable, so the profile system must ignore it when comparing a
+        // config against the defaults (the on-load stamp to 1 would otherwise read a pristine config as "Custom") —
+        // which also means CopySettings never propagates it into a profile snapshot.
+        //
+        // The FIELD INITIALIZER is deliberately CurrentSettingsSchema, NOT the Scribe default of 0 (issue #238): a
+        // freshly CONSTRUCTED settings object is by definition already in the current schema — a fresh install
+        // (LoadedModManager.ReadModSettings returns `new T()` WITHOUT calling ExposeData when no config file
+        // exists), a profile snapshot from CaptureSnapshot, an imported profile from DefaultsForVersion. Leaving it
+        // at 0 made every one of those write NO stamp node (Scribe_Values.Look omits a value equal to its default)
+        // and therefore re-run the legacy migration on every launch, wiping the nine yield settings. This does NOT
+        // hide a genuine legacy config: Scribe_Values.Look ASSIGNS unconditionally on load, so an absent node still
+        // overwrites this initializer with the Scribe default 0. The field==Scribe==Reset drift triple does not
+        // apply here — [ProfileMeta] fields are exempt (see scripts/check-settings-drift.ts META_FIELDS).
+        [ProfileMeta] public int settingsSchemaVersion = CurrentSettingsSchema;
         private const int CurrentSettingsSchema = 1;
+
+        // The pre-#79 node labels MigrateLegacyYieldSettings reads. This list and the migration's own
+        // Scribe_Values.Look labels must never diverge — a label the migration reads but the probe omits means a
+        // config carrying only that node silently stops migrating. scripts/check-settings-drift.ts compares the
+        // two and fails the build on any difference, so the pairing is enforced rather than hoped for.
+        private static readonly string[] LegacyYieldNodeLabels =
+        {
+            "pickupMode", "haulHarvest", "haulMining", "haulDeepDrill",
+            "haulDeconstruct", "haulAnimals", "haulStrip", "haulUninstall",
+        };
 
         // --- unloading ---
         // The "settle" window: how long after its LAST pickup a pawn keeps accumulating before an automatic
@@ -598,6 +640,13 @@ namespace HaulersDream
         // the per-pawn toggle so you can stop individual pawns from auto-hauling (their CompHauledToInventory
         // .autoHaulYields preference still applies whether or not the gizmo is shown).
         public bool showAutoHaulGizmo = false;
+        // Show the per-bench "Gather ingredients" toggle gizmo on each workbench (issue #230). Default ON — the
+        // switch is the whole point of the feature and is useless if it cannot be found. VISIBILITY ONLY: a bench
+        // the player has already switched off STAYS off whether or not the button is shown, so hiding the control
+        // can never silently re-enable gathering somewhere the player turned it off. (Common Sense does the
+        // opposite with its own bench toggle — it ignores the per-bench flag while its gizmo setting is off. HD's
+        // convention is the safe one and is the one to follow.)
+        public bool showBenchGatherGizmo = true;
         public bool verboseLogging = false;
 
         // --- main-menu report notifications ---
@@ -699,6 +748,7 @@ namespace HaulersDream
             Scribe_Values.Look(ref mealsOnWheels, "mealsOnWheels", true);
             Scribe_Values.Look(ref eatFromVehiclesAway, "eatFromVehiclesAway", false);
             Scribe_Values.Look(ref medicineFromVehiclesAway, "medicineFromVehiclesAway", false);
+            Scribe_Values.Look(ref drugsForWithdrawal, "drugsForWithdrawal", true);
             Scribe_Values.Look(ref buildFromVehiclesAway, "buildFromVehiclesAway", false);
             Scribe_Values.Look(ref bulkHaul, "bulkHaul", true);
             Scribe_Values.Look(ref bulkHaulTrigger, "bulkHaulTrigger", BulkHaulTrigger.SecondTasked);
@@ -711,6 +761,7 @@ namespace HaulersDream
             Scribe_Values.Look(ref pickupDelayOnLoading, "pickupDelayOnLoading", false);
             Scribe_Values.Look(ref pickupDelayOnDirectHarvest, "pickupDelayOnDirectHarvest", false);
             Scribe_Values.Look(ref haulOversizedInInventory, "haulOversizedInInventory", true);
+            Scribe_Values.Look(ref bulkHaulCorpses, "bulkHaulCorpses", true);
             Scribe_Values.Look(ref bulkHaulUrgent, "bulkHaulUrgent", true);
             Scribe_Values.Look(ref bulkHaulUrgentRadius, "bulkHaulUrgentRadius", 3);
             Scribe_Values.Look(ref bulkHaulUrgentIncludeNonUrgent, "bulkHaulUrgentIncludeNonUrgent", false);
@@ -819,16 +870,25 @@ namespace HaulersDream
             Scribe_Values.Look(ref yieldStrip, "yieldStrip", YieldBehavior.DropThenHaul);
             Scribe_Values.Look(ref yieldUninstall, "yieldUninstall", YieldBehavior.DropThenHaul);
             Scribe_Values.Look(ref yieldFishing, "yieldFishing", YieldBehavior.DropThenHaul);
+            // The Scribe default is 0 = "this node carries no stamp", which is NOT the field initializer
+            // (CurrentSettingsSchema — see the field). Look assigns unconditionally on load, so an absent node
+            // reliably yields 0 here even though a constructed object starts at CurrentSettingsSchema.
             Scribe_Values.Look(ref settingsSchemaVersion, "settingsSchemaVersion", 0);
             // One-time migration of the pre-#79 per-work bools + global pickupMode into the 9 LEGACY yieldX values
             // (yieldFishing is a newer category with no legacy bool — it is left at its field default, never migrated).
-            // Guarded on the schema version so it runs AT MOST ONCE: a fresh install / already-migrated save
-            // (schemaVersion >= 1) keeps its 9 fields untouched. On a legacy save the old nodes are read into
-            // locals (absent nodes yield the old defaults, which map to the correct new defaults — harmless on a
-            // fresh state). The stamp afterwards guarantees we never re-migrate and clobber a player's choices.
+            //
+            // Issue #238: this used to be guarded on the stamp ALONE (settingsSchemaVersion < 1), which re-ran the
+            // migration — and so overwrote the nine values Scribe just loaded above — on every launch for any node
+            // that carries no stamp. That is EVERY profile snapshot (CopySettings skips [ProfileMeta], so a
+            // snapshot's stamp never left 0 and was therefore never written) and any live config that has not yet
+            // survived one load plus one write. The guard now asks the DATA: migrate only when the node being
+            // loaded actually CONTAINS a legacy node. A legacy config whose 8 legacy values were all at their old
+            // defaults needs no migration either — MapLegacyYield(true, DropThenHaul, …) returns DropThenHaul,
+            // which is already the field default (pinned by WorkTypePolicyTests).
             if (Scribe.mode == LoadSaveMode.LoadingVars)
             {
-                if (settingsSchemaVersion < 1)
+                if (SettingsSchemaPolicy.ShouldMigrateLegacyYields(
+                        settingsSchemaVersion, CurrentSettingsSchema, HasLegacyYieldNodes()))
                     MigrateLegacyYieldSettings();
                 settingsSchemaVersion = CurrentSettingsSchema;
             }
@@ -843,6 +903,7 @@ namespace HaulersDream
             Scribe_Values.Look(ref nonHomeMapsPlayerControlledOnly, "nonHomeMapsPlayerControlledOnly", false);
             Scribe_Values.Look(ref hideGizmo, "hideGizmo", false);
             Scribe_Values.Look(ref showAutoHaulGizmo, "showAutoHaulGizmo", false);
+            Scribe_Values.Look(ref showBenchGatherGizmo, "showBenchGatherGizmo", true);
             Scribe_Values.Look(ref verboseLogging, "verboseLogging", false);
             Scribe_Values.Look(ref notifyThreshold, "notifyThreshold", NotifyThreshold.All);
 
@@ -896,6 +957,7 @@ namespace HaulersDream
             mealsOnWheels = true;
             eatFromVehiclesAway = false;
             medicineFromVehiclesAway = false;
+            drugsForWithdrawal = true;
             buildFromVehiclesAway = false;
             bulkHaul = true;
             bulkHaulTrigger = BulkHaulTrigger.SecondTasked;
@@ -908,6 +970,7 @@ namespace HaulersDream
             pickupDelayOnLoading = false;
             pickupDelayOnDirectHarvest = false;
             haulOversizedInInventory = true;
+            bulkHaulCorpses = true;
             bulkHaulUrgent = true;
             bulkHaulUrgentRadius = 3;
             bulkHaulUrgentIncludeNonUrgent = false;
@@ -1002,7 +1065,13 @@ namespace HaulersDream
             yieldStrip = YieldBehavior.DropThenHaul;
             yieldUninstall = YieldBehavior.DropThenHaul;
             yieldFishing = YieldBehavior.DropThenHaul;
-            settingsSchemaVersion = 0;
+            // Issue #238: a reset config IS at the current schema (the ten yieldX fields are set to their current
+            // defaults right above), so stamp it. Setting 0 here made a post-reset config write NO stamp node
+            // (Scribe omits a value equal to its default) and re-run the legacy migration on the next launch,
+            // wiping whatever yield settings the player chose after the reset. Also covers DefaultsForVersion —
+            // the base for every IMPORTED profile snapshot. [ProfileMeta], so the field==Scribe==Reset drift
+            // triple does not apply (scripts/check-settings-drift.ts META_FIELDS).
+            settingsSchemaVersion = CurrentSettingsSchema;
             allPawnsCanHaul = false;
             allPawnsCanClean = false;
             allPawnsCanCutPlants = false;
@@ -1014,6 +1083,7 @@ namespace HaulersDream
             nonHomeMapsPlayerControlledOnly = false;
             hideGizmo = false;
             showAutoHaulGizmo = false;
+            showBenchGatherGizmo = true;
             verboseLogging = false;
             notifyThreshold = NotifyThreshold.All;
         }
@@ -1118,6 +1188,26 @@ namespace HaulersDream
                 if (!string.IsNullOrEmpty(name) && have.Add(name))
                     itemUnloadRules.Add(EncodeRule(name, new ItemUnloadRule(ItemUnloadMode.KeepAll)));
             keepDefNames = null;
+        }
+
+        /// <summary>
+        /// True when the XML node currently being loaded actually contains at least one pre-#79 legacy yield node.
+        /// This is the same lookup Scribe_Values.Look performs internally (Scribe.loader.curXmlParent[label]), and
+        /// ScribeExtractor.SaveableFromNode re-points curXmlParent at the nested node around a deep load — so this
+        /// correctly reads the top-level ModSettings node for the live settings and a profile's own &lt;snapshot&gt;
+        /// node for a snapshot. Only meaningful during LoadingVars; false everywhere else.
+        /// </summary>
+        private static bool HasLegacyYieldNodes()
+        {
+            if (Scribe.mode != LoadSaveMode.LoadingVars)
+                return false;
+            var parent = Scribe.loader?.curXmlParent;
+            if (parent == null)
+                return false;
+            for (int i = 0; i < LegacyYieldNodeLabels.Length; i++)
+                if (parent[LegacyYieldNodeLabels[i]] != null)
+                    return true;
+            return false;
         }
 
         // ----- issue #79: one-time migration of the pre-#79 per-work bools + global pickupMode -> the 9 yieldX -----

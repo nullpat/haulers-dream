@@ -32,8 +32,8 @@ namespace HaulersDream
     /// them along — clean disposal). The DESTROY policy is the one deliberate exception to this mod's
     /// never-delete rule: an explicit opt-in, applied only to tainted apparel of the configured category.
     ///
-    /// Loot that doesn't fit the carry/CE limits stays on the ground as ordinary haulables (the bulk-haul
-    /// sweep picks it up later) — nothing is ever lost by stripping.
+    /// Loot that doesn't fit the carry/CE limits, or that no storage would accept, stays on the ground as
+    /// ordinary haulables (the bulk-haul sweep picks it up later) — nothing is ever lost by stripping.
     /// </summary>
     [HarmonyPatch(typeof(Pawn_CarryTracker), nameof(Pawn_CarryTracker.TryStartCarry),
         typeof(Thing), typeof(int), typeof(bool))]
@@ -116,6 +116,12 @@ namespace HaulersDream
     /// pawn is dead, so they are never dropped and stay on the body. Narrow by design: fires only when
     /// <c>pawn.Dead</c> (inside a corpse) and HD's settings have at least one LeaveOnCorpse policy; for living
     /// pawns or when no leave policy is set, the original selector (typically null = strip all) is unchanged.
+    ///
+    /// <para>HALF OF A PAIR. Refusing to drop a piece is only correct if the game also stops CLAIMING that piece
+    /// is strippable — otherwise a strip order is accepted, deletes its own designation and removes nothing, over
+    /// and over. <see cref="Patch_CanBeStrippedByColony_LeaveOnCorpse"/> is the other half; both consult the same
+    /// <see cref="CorpseStripper.StaysOnCorpse"/> rule behind the same
+    /// <see cref="StripPolicy.LeavesAnyTainted"/> pre-gate, so they cannot come apart.</para>
     /// </summary>
     [HarmonyPatch(typeof(Pawn_ApparelTracker), nameof(Pawn_ApparelTracker.DropAll))]
     public static class Patch_DropAll_LeaveOnCorpse
@@ -130,18 +136,51 @@ namespace HaulersDream
                 return;
 
             var original = selector;
-            selector = ap =>
-            {
-                // Same taint definition as StripAndScoop: WornByCorpse + the apparel kind cares.
-                if (ap.WornByCorpse && ap.def.apparel != null && ap.def.apparel.careIfWornByCorpse)
-                {
-                    var action = StripPolicy.ApparelAction(tainted: true, ap.Smeltable,
-                        s.taintedSmeltablePolicy, s.taintedNonSmeltablePolicy);
-                    if (action == TaintedApparelPolicy.LeaveOnCorpse)
-                        return false; // keep on the body — don't drop
-                }
-                return original == null || original(ap);
-            };
+            selector = ap => !CorpseStripper.StaysOnCorpse(ap, s) && (original == null || original(ap));
+        }
+    }
+
+    /// <summary>
+    /// KEEP VANILLA'S VIEW OF "IS THERE ANYTHING TO STRIP?" HONEST (the manual-Strip no-op bug). A POSTFIX on
+    /// <c>StrippableUtility.CanBeStrippedByColony(Thing)</c>, the one gate every strip entry point funnels
+    /// through, narrowing it to false for a CORPSE whose every remaining piece
+    /// <see cref="Patch_DropAll_LeaveOnCorpse"/> would refuse to drop.
+    ///
+    /// <para>WHY: vanilla's <c>Pawn.AnythingToStrip()</c> counts unlocked worn apparel and cannot see HD's
+    /// selector (decompile-verified). So with a tainted policy set to "leave on corpse", a body wearing only
+    /// such pieces still reported strippable — the player could designate it, the pawn walked over, and
+    /// <c>JobDriver_Strip</c>'s last toil ran its three steps IN THIS ORDER (decompile-verified): delete the
+    /// Strip designation, call <c>Strip()</c>, increment <c>BodiesStripped</c>. The designation went away, the
+    /// selector dropped nothing, and the record counted a strip that never happened. Re-designating did the same
+    /// thing forever: permanent, silent and repeatable. It only bit a player who changed a tainted policy to
+    /// "leave on corpse", which is why it read as "sometimes".</para>
+    ///
+    /// <para>ONE postfix fixes every symptom because all four consumers read this gate (each verified against the
+    /// decompiled 1.6 source): <c>Designator_Strip.CanDesignateThing</c> (so the order can no longer be placed),
+    /// <c>WorkGiver_Strip.HasJobOnThing</c> (so an already-placed designation hands out no job),
+    /// <c>JobDriver_Strip</c>'s driver-global <c>FailOn</c> (so an in-flight job fails BEFORE the toil that
+    /// deletes the designation — global fail conditions are evaluated before a toil's initAction), and HD's own
+    /// <see cref="CorpseStripper.MaybeStripForHaul"/> pre-check (which would have found nothing to strip anyway).</para>
+    ///
+    /// <para>NARROW BY CONSTRUCTION, in the order the checks run: a false result is left alone; a non-Corpse is
+    /// left alone (HD's DropAll prefix is dead-gated on <c>pawn.Dead</c>, so living prisoners and downed raiders
+    /// keep vanilla's answer exactly); and the whole thing short-circuits unless a tainted policy is set to a
+    /// keep-out-of-storage value — the SAME <see cref="StripPolicy.LeavesAnyTainted"/> pre-gate the DropAll
+    /// prefix uses, so the two are active together or not at all. At the Take/Take defaults it is byte-identical
+    /// to vanilla.</para>
+    /// </summary>
+    [HarmonyPatch(typeof(StrippableUtility), nameof(StrippableUtility.CanBeStrippedByColony))]
+    public static class Patch_CanBeStrippedByColony_LeaveOnCorpse
+    {
+        static void Postfix(Thing th, ref bool __result)
+        {
+            if (!__result || !(th is Corpse corpse))
+                return;
+            var s = HaulersDreamMod.Settings;
+            if (s == null || !StripPolicy.LeavesAnyTainted(s.taintedSmeltablePolicy, s.taintedNonSmeltablePolicy))
+                return;
+            if (!CorpseStripper.AnythingHdWouldStrip(corpse, s))
+                __result = false;
         }
     }
 
@@ -209,6 +248,81 @@ namespace HaulersDream
                 return false;
             return StripPolicy.LeaveWhereItIs(tainted: true, ap.Smeltable,
                 s.taintedSmeltablePolicy, s.taintedNonSmeltablePolicy);
+        }
+
+        /// <summary>
+        /// Would HD refuse to take <paramref name="ap"/> OFF the body it is worn on? The ONE per-piece rule behind
+        /// both halves of the leave-on-corpse feature: <see cref="Patch_DropAll_LeaveOnCorpse"/>'s injected drop
+        /// filter rejects a piece iff this is true, and <see cref="AnythingHdWouldStrip"/> discounts it for the
+        /// same reason. Sharing one call is what keeps vanilla's "anything to strip?" answer and HD's actual drop
+        /// behaviour from drifting apart.
+        ///
+        /// <para>"Tainted" is the game's own definition, identical to <see cref="StripCorpseDroppingLoot"/>'s
+        /// per-piece test: <c>WornByCorpse</c> AND the apparel kind cares (<c>careIfWornByCorpse</c>). Untainted
+        /// apparel is never left. The caller is expected to have run the cheap
+        /// <see cref="StripPolicy.LeavesAnyTainted"/> pre-gate; this method does the per-piece work
+        /// unconditionally.</para>
+        /// </summary>
+        /// <param name="ap">One worn piece; a null <c>def.apparel</c> reads as untainted (never left).</param>
+        /// <param name="s">Live settings — the two tainted-apparel policies.</param>
+        internal static bool StaysOnCorpse(Apparel ap, HaulersDreamSettings s)
+        {
+            if (ap == null || s == null)
+                return false;
+            bool tainted = ap.WornByCorpse && ap.def.apparel != null && ap.def.apparel.careIfWornByCorpse;
+            // Thing.Smeltable, not def.smeltable: the instance check also excludes relics and non-smeltable
+            // stuff, matching what a smelter would actually accept (same call StripCorpseDroppingLoot makes).
+            return StripPolicy.StaysOnCorpse(tainted, ap.Smeltable,
+                s.taintedSmeltablePolicy, s.taintedNonSmeltablePolicy);
+        }
+
+        /// <summary>
+        /// Is there anything on <paramref name="corpse"/> that a strip — by hand or automatic — would actually
+        /// remove, once HD's leave-on-corpse rule is applied? A faithful mirror of vanilla
+        /// <c>Pawn.AnythingToStrip()</c> (decompile-verified), with the one apparel clause narrowed by
+        /// <see cref="StaysOnCorpse"/>: equipment counts, a non-empty inventory counts, and worn apparel counts
+        /// only when the strip would take it off.
+        ///
+        /// <para>The locked-apparel split is vanilla's, not ours: <c>Pawn.Strip</c> calls
+        /// <c>apparel.DropAll(pos, forbid: false, dropLocked: pawn.Destroyed)</c>, so a bonded/biocoded/royal-locked
+        /// piece comes off only once the inner pawn is destroyed — which is exactly why vanilla's own probe reads
+        /// <c>AnyApparel</c> in that case and <c>AnyApparelUnlocked</c> otherwise. Mirroring it here keeps the
+        /// answer honest for both.</para>
+        ///
+        /// <para>Only meaningful for the caller that already knows a tainted policy leaves something on the body
+        /// (see <see cref="Patch_CanBeStrippedByColony_LeaveOnCorpse"/>); with the Take/Take defaults it returns
+        /// exactly what vanilla's probe returned, since no piece is ever refused.</para>
+        /// </summary>
+        /// <param name="corpse">The body to test; its <c>InnerPawn</c> supplies the trackers.</param>
+        /// <param name="s">Live settings — the two tainted-apparel policies.</param>
+        /// <returns>False only when the body is, for HD's purposes, already stripped bare.</returns>
+        internal static bool AnythingHdWouldStrip(Corpse corpse, HaulersDreamSettings s)
+        {
+            var inner = corpse?.InnerPawn;
+            if (inner == null)
+                return false;
+            // Vanilla's own first clause. Redundant for the postfix caller (CanBeStrippedByColony already ran
+            // AnythingToStrip, which checks it), kept so this reads as a complete mirror on its own.
+            if (!inner.kindDef.canStrip)
+                return false;
+            if (inner.equipment != null && inner.equipment.HasAnything())
+                return true;
+            if (inner.inventory != null && inner.inventory.innerContainer.Count > 0)
+                return true;
+            var apparel = inner.apparel;
+            if (apparel == null)
+                return false;
+            bool dropLocked = inner.Destroyed;
+            var worn = apparel.WornApparel;
+            for (int i = 0; i < worn.Count; i++)
+            {
+                var ap = worn[i];
+                if (!dropLocked && apparel.IsLocked(ap))
+                    continue; // stays on the body whatever the policy says — vanilla wouldn't drop it either
+                if (!StaysOnCorpse(ap, s))
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>After stripping a LIVING pawn, append a vanilla Strip job at the end of the stripper's
@@ -306,8 +420,9 @@ namespace HaulersDream
         }
 
         /// <summary>Strip <paramref name="corpse"/> if this pickup qualifies under the settings. Loot is
-        /// scooped into <paramref name="hauler"/>'s inventory (tagged) where it fits; the rest stays on
-        /// the ground as normal haulables. Safe to call speculatively — it gates itself.</summary>
+        /// scooped into <paramref name="hauler"/>'s inventory (tagged) where it fits and has somewhere to
+        /// go; the rest stays on the ground as normal haulables. Safe to call speculatively — it gates
+        /// itself.</summary>
         internal static void MaybeStripForHaul(Pawn hauler, Corpse corpse)
         {
             var s = HaulersDreamMod.Settings;
@@ -395,6 +510,14 @@ namespace HaulersDream
                 return;
             // The same "your own dead" test the on-haul strip uses (OfPlayerSilentFail never logs when there
             // is no player faction). The pure policy composes the opt-ins and skip conditions.
+            //
+            // DELIBERATE: this reads corpse.AnythingToStrip() DIRECTLY, so it gets VANILLA's answer — the
+            // Patch_CanBeStrippedByColony_LeaveOnCorpse postfix sits on a different method and does not reach it.
+            // That is what this seam wants. The question here is "is this body worth stripping before the bill
+            // burns it?", and a body wearing only leave-on-corpse rags still answers yes: the strip runs, the
+            // per-piece rule keeps those rags on the body, and they are cremated with it — which is exactly the
+            // clean disposal the policy promises. Narrowing this to HD's own view would skip the strip entirely
+            // and burn the WEAPONS too. Don't "fix" it to match the postfix.
             bool isPlayerFactionCorpse = inner.Faction == Faction.OfPlayerSilentFail;
             if (!CremationStripPolicy.ShouldStrip(s.stripBeforeCremation, recipe.autoStripCorpses,
                     corpse.AnythingToStrip(), isPlayerFactionCorpse, s.stripColonistCorpses))
@@ -419,15 +542,25 @@ namespace HaulersDream
             }
             if (job.def == JobDefOf.HaulToCell)
                 return mode == AutoStripMode.AllHauls; // stockpile haul — only under "every haul"
-            // HD's bulk pickup ("Pick up X" on a corpse, or "Haul everything nearby" anchored on one — the two
-            // ways a corpse enters the bulk driver; the automatic scan never assigns one since
-            // WorkGiver_HaulGeneral.JobOnThing nulls corpses, and the sweep pool skips
-            // them): semantically a STORAGE haul (the unload pass delivers to best storage), so
-            // it strips exactly like HaulToCell — under "every haul" only. The eventual destination is unknown at
-            // pickup, so under DisposalOnly a picked corpse that later unloads into a grave arrives dressed —
-            // accepted: the gear is buried with it (recoverable by exhuming), and a clothed corpse rarely fits
-            // the inventory mass clamp anyway (it then falls back to the hand-haul, whose TryStartCarry seam
-            // strips at interment as before). "Keep X in inventory" is NOT a haul and never strips.
+            // HD's bulk pickup: semantically a STORAGE haul (the unload pass delivers to best storage), so it
+            // strips exactly like HaulToCell — under "every haul" only. A corpse now reaches this driver four
+            // ways: "Pick up X" on a body, "Haul everything nearby" anchored on one, and — since the corpse sweep
+            // opt-in — the automatic corpse-haul scan and "Prioritize hauling" on a body, both through the
+            // WorkGiver_HaulCorpses postfix. (Before that, corpses reached no bulk path at all: vanilla's general
+            // haul giver nulls them and the sweep pool skipped them.)
+            //
+            // The eventual destination is unknown at pickup, so under DisposalOnly a picked corpse that later
+            // unloads into a grave would arrive DRESSED. That is accepted for the two MANUAL entries — the gear
+            // is buried with the body, recoverable by exhuming, and nothing is destroyed — because the player
+            // pointed at that body and asked for the trip.
+            //
+            // It is NOT accepted for the automatic scan, which is why CorpseSweepPolicy stands the automatic
+            // corpse sweep down entirely in this mode (both as an anchor and as a swept neighbour). Otherwise a
+            // DisposalOnly player who changed no setting would start seeing bodies interred with their gear on,
+            // where before every automatic grave haul was a vanilla HaulToContainer stripped at the TryStartCarry
+            // seam. A body too heavy for the inventory ceiling still falls back to that hand-haul and strips as
+            // before, and the default "every corpse haul" mode is unaffected (it strips at pickup either way).
+            // "Keep X in inventory" is NOT a haul and never strips.
             if (job.def == HaulersDreamDefOf.HaulersDream_BulkHaul)
                 return mode == AutoStripMode.AllHauls;
             return false; // caravan packing, transport pods, anything else: never strip
@@ -569,8 +702,8 @@ namespace HaulersDream
         }
 
         /// <summary>AUTO-STRIP ON HAUL: drop the corpse's gear on its cell, then SCOOP the loose loot into the
-        /// hauler's inventory (tagged for the unload pass). The strip core is shared with the cremation seam;
-        /// only this haul path scoops.</summary>
+        /// hauler's inventory (tagged for the unload pass) where it fits and has somewhere to go. The strip
+        /// core is shared with the cremation seam; only this haul path scoops.</summary>
         private static void StripAndScoop(Pawn hauler, Corpse corpse, HaulersDreamSettings s)
         {
             var loot = StripCorpseDroppingLoot(hauler, corpse, s);
@@ -584,23 +717,37 @@ namespace HaulersDream
             // still happened: the gear stays on the ground as ordinary haulables for real haulers.
             if (YieldRouter.IsEligible(hauler))
             {
-                ScoopLoot(hauler, loot, s);
-                HDLog.Dbg($"{hauler} auto-stripped {corpse} on haul: {loot.Count} loot entries.");
+                int scooped = ScoopLoot(hauler, loot, s);
+                HDLog.Dbg($"{hauler} auto-stripped {corpse} on haul: scooped {scooped} of {loot.Count} loot entries.");
             }
         }
 
-        // Load the stripped loot into the hauler's inventory (tagged — the unload pass, shared
-        // inventories, and CE HoldTracker all pick it up from there). Whatever doesn't fit the
-        // carry/CE limits simply stays on the ground as an ordinary haulable.
-        // Deliberately NO #121 pickup pause here (see PickupPause): this scoop fires inside vanilla's
-        // Pawn_CarryTracker.TryStartCarry seam as a side effect of a committed corpse carry (no HD toil
-        // exists to pace); the BulkHaul corpse path already pays the pause in its own take loop.
-        private static void ScoopLoot(Pawn hauler, List<ThingCount> loot, HaulersDreamSettings s)
+        /// <summary>
+        /// Load the stripped loot into the hauler's inventory (tagged — the unload pass, shared inventories, and
+        /// CE HoldTracker all pick it up from there). A piece is scooped only when it FITS the carry/CE limits
+        /// AND some storage would accept it; anything else simply stays on the ground as an ordinary haulable —
+        /// spawned and UN-forbidden at the corpse's own cell, visible to <c>listerHaulables</c>, and collected
+        /// automatically the moment a stockpile accepts it. Per-PIECE, not all-or-nothing: a raider yields a
+        /// rifle, a vest, a tainted duster and drugs, and one unwanted rag must not strand the rifle.
+        ///
+        /// Deliberately NO #121 pickup pause here (see PickupPause): this scoop fires inside vanilla's
+        /// Pawn_CarryTracker.TryStartCarry seam as a side effect of a committed corpse carry (no HD toil
+        /// exists to pace); the BulkHaul corpse path already pays the pause in its own take loop.
+        /// </summary>
+        /// <param name="hauler">The pawn that stripped the body; the loot goes into its inventory.</param>
+        /// <param name="loot">The strip's per-piece drops, each entry capped at what the CORPSE contributed
+        /// (a merged drop may sit in a bigger pre-existing ground stack).</param>
+        /// <param name="s">Live settings — the smart-overload ceiling that sizes each take.</param>
+        /// <returns>How many of <paramref name="loot"/>'s entries were actually pocketed, so the caller can log
+        /// "scooped N of M" without the reader subtracting. Zero when the pawn has no inventory or comp.</returns>
+        private static int ScoopLoot(Pawn hauler, List<ThingCount> loot, HaulersDreamSettings s)
         {
             var inv = hauler.inventory?.GetDirectlyHeldThings();
             var comp = hauler.GetComp<CompHauledToInventory>();
             if (inv == null || comp == null)
-                return;
+                return 0;
+            int scooped = 0;
+            int noDestination = 0;
             for (int i = 0; i < loot.Count; i++)
             {
                 var t = loot[i].Thing;
@@ -617,6 +764,32 @@ namespace HaulersDream
                 take = Math.Min(take, loot[i].Count);
                 if (take <= 0)
                     continue;
+                // #234 — never pocket a piece with nowhere to go. This was the one non-player-ordered intake in the
+                // mod that skipped the destination probe all its siblings apply, so a tainted duster no stockpile
+                // accepts rode along to the hauler's next job (a butcher-bill fetch — QualifyingHaul admits DoBill)
+                // and got dumped at the bench. Reuse YieldRouter's gate instead of writing a second probe: it
+                // satisfies two load-bearing constraints by construction.
+                //   1. It takes the THING, not the def. Tainted apparel is rejected instance-by-instance
+                //      (SpecialThingFilterWorker_DeadmansApparel.Matches reads (t as Apparel)?.WornByCorpse), so a
+                //      def-level probe or per-def cache would answer "yes, apparel is allowed" and fix nothing.
+                //   2. It hard-codes needAccurateResult:false, which consumes no Rand — no multiplayer-determinism
+                //      hazard, hence none of the Rand.PushState/PopState wrapping that InventorySurplus
+                //      .HasUnloadDestination has to carry for its per-frame alert callers.
+                // No StorageBuildingFilter context is pushed, so the documented allow-all default (Unload) applies.
+                // That is deliberate: this asks only whether a home EXISTS, not which one to pick, and an intake
+                // probe NARROWER than the unload probe would under-admit — refusing a piece whose only home is a
+                // building the player denied for opportunistic routing, even though the unload would deliver it
+                // there happily. Neither this seam nor the bulk take toil is reachable from inside an
+                // Opportunistic/BeforeCarry scope anyway (StorageRouting.cs:238-240).
+                // ORDER: after IsInValidStorage above — mandatory, since a piece already in accepting storage is
+                // HOME and probing it would ask for something BETTER, a different and wrong question. After the
+                // capacity gate — pure arithmetic before a slot-group walk, the cost ordering documented at
+                // BulkHaul.cs:949-950; the outcome is identical either way.
+                if (!YieldRouter.HasScoopDestination(hauler, t))
+                {
+                    noDestination++;
+                    continue;
+                }
                 // SplitOff with count >= stackCount despawns the thing itself (full-stack pickup path).
                 var split = t.SplitOff(Math.Min(take, t.stackCount));
                 if (inv.TryAdd(split, canMergeWithExistingStacks: false))
@@ -625,6 +798,7 @@ namespace HaulersDream
                     comp.NotifyYieldPicked();
                     if (!split.Spawned)
                         split.Position = hauler.Position;
+                    scooped++;
                 }
                 else if (split != null && !split.Destroyed && !split.Spawned)
                 {
@@ -632,6 +806,18 @@ namespace HaulersDream
                     GenPlace.TryPlaceThing(split, hauler.Position, hauler.Map, ThingPlaceMode.Near);
                 }
             }
+            // Conditional: HDLog.Dbg ALWAYS writes the disk trail (HaulersDreamMod.cs:427-432), so an
+            // unconditional line would add noise to every bug report for the overwhelmingly common
+            // nothing-left-behind case. Recorded when it does happen, so a report shows the decision.
+            // "nowhere better to put them", not "no storage accepts them": a HasScoopDestination miss is
+            // TryFindBestBetterStorageFor failing for ANY reason — a full, reserved or unreachable cell
+            // (IsGoodStoreCell -> CanReserveNew / CanReach) as much as a filter rejection. The count is
+            // ENTRIES, not pieces: StripCorpseDroppingLoot's placedAction fires once per landing, so one
+            // stackable drop that split across two ground stacks contributes two entries pointing at the
+            // same merged Thing, and both are counted when it has nowhere to go.
+            if (noDestination > 0)
+                HDLog.Dbg($"{hauler} auto-strip: left {noDestination} stripped loot entr(ies) at the body — nowhere better to put them.");
+            return scooped;
         }
     }
 }
