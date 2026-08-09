@@ -90,8 +90,128 @@ namespace HaulersDream
             if (!pawn.Reserve(queue[0], job, 1, -1, null, errorOnFailed))
                 return false;
             pawn.ReserveAsManyAsPossible(queue, job);
+            CommitPlannedDestinations();
             return true;
         }
+
+        /// <summary>
+        /// Tell the storage commitment ledger where this sweep's cargo is going, so every other hauler prices
+        /// the destination with this load already taken off the top.
+        ///
+        /// <para>Registered HERE and nowhere else for this driver: <c>TryMakePreToilReservations</c> is the one
+        /// hook RimWorld guarantees runs exactly once, on the main thread, when a job genuinely starts — and
+        /// it is already inside RimWorld Multiplayer's synced job-start path, so the write happens in lockstep
+        /// on every client. Registering at plan time instead would book a claim for every speculative float-menu
+        /// probe; registering at pickup time would leave the whole walk to the first stack unaccounted, which is
+        /// precisely the window several haulers plan in.</para>
+        ///
+        /// <para>The claim SURVIVES this job. A bulk haul picks up in one job and deposits in a later
+        /// <c>JobDriver_UnloadHauledInventory</c>, so nothing may release on job end — the ledger instead clamps
+        /// every row to what the pawn is still visibly carrying, which releases it the moment the cargo lands.</para>
+        ///
+        /// <para>→ GOTCHA: MULTIPLAYER. The commit loop below is order-SENSITIVE — each <c>Commit</c> is
+        /// visible to the next entry's destination probe, so committing steel before wood can send the wood
+        /// somewhere else. What keeps that deterministic is not this method: it is that
+        /// <c>job.targetQueueB</c> is filled in an order two clients must agree on, because
+        /// <c>BulkHaul.TakeNearestEligible</c> takes the lexicographic minimum of
+        /// <c>(distSq, thingIDNumber)</c> over its candidate pool, which erases the pool's own
+        /// <c>HashSet</c>-derived order. The def order here is that queue's first-appearance order and is
+        /// deliberately left alone, so the anchor def — the one <c>BulkHaul</c> priced the plan against —
+        /// still commits first. If that min-pick ever loses its <c>thingIDNumber</c> tiebreak, this loop
+        /// becomes a desync and needs the same <c>defName</c> sort <c>StorageCommitments.RunJanitor</c>
+        /// uses.</para>
+        /// </summary>
+        private void CommitPlannedDestinations()
+        {
+            var map = pawn?.Map;
+            if (map == null || !StorageCommitments.ActiveOn(map))
+                return;
+            var queue = job.targetQueueB;
+            var counts = job.countQueue;
+            if (queue == null)
+                return;
+
+            var planned = plannedScratch ?? (plannedScratch = new List<PlannedCargo>());
+            planned.Clear();
+            for (int i = 0; i < queue.Count; i++)
+            {
+                var t = queue[i].Thing;
+                if (t?.def == null)
+                    continue;
+                int units = counts != null && i < counts.Count ? counts[i] : 0;
+                if (units <= 0)
+                    continue;
+                units = System.Math.Min(units, t.stackCount);
+                if (units <= 0)
+                    continue;
+                Fold(planned, t, units);
+            }
+
+            for (int i = 0; i < planned.Count; i++)
+            {
+                var entry = planned[i];
+                // → NOTE: this probe can name a DIFFERENT group than the one BulkHaul priced the plan
+                //   against. The plan starts from the cell vanilla chose for the anchor; this asks, per def,
+                //   where the load will actually be put down — with a lower priority floor, and through the
+                //   commitment gate, so a group that filled up between planning and starting is skipped. The
+                //   claim follows where the cargo is really going, which is the honest answer; if the two
+                //   diverge, the unload re-commits against the destination it actually reaches.
+                var group = StorageEvidence.DestinationGroupFor(map, pawn, entry.sample);
+                if (group == null)
+                    continue; // nowhere to put it (or a container, whose capacity vanilla coordinates itself)
+                // A forced order takes the space back off whoever else claimed it, exactly as vanilla's own
+                // JobDriver_HaulToContainer.UpdateTracker does for a container destination.
+                if (job.playerForced
+                    && StorageCommitments.FreeUnitsFor(pawn, group, entry.def, entry.sample) <= 0)
+                    StorageCommitments.InterruptCommittersTo(group, entry.def, pawn);
+                // The plan's units OR whatever the pawn is already visibly moving of this def, whichever is
+                // larger: a sweep can start with cargo of the same def already in its pockets from an
+                // earlier trip, and that load is going to the same place. Claiming only the newly planned
+                // units would leave the rest invisible to every other hauler.
+                int units = System.Math.Max(entry.units, StorageCommitments.UnitsMovingOf(pawn, entry.def));
+                StorageCommitments.Commit(pawn, group, entry.def, units, "bulk-sweep");
+            }
+            planned.Clear();
+        }
+
+        /// <summary>Fold one queued stack into the per-def totals, keeping the lowest-<c>thingIDNumber</c>
+        /// stack as the one the destination probe runs on — so two multiplayer clients probe with the same
+        /// stack and resolve the same destination.</summary>
+        /// <param name="planned">The per-def totals being built.</param>
+        /// <param name="t">The queued stack.</param>
+        /// <param name="units">Units planned from it.</param>
+        private static void Fold(List<PlannedCargo> planned, Thing t, int units)
+        {
+            for (int i = 0; i < planned.Count; i++)
+            {
+                if (planned[i].def != t.def)
+                    continue;
+                var merged = planned[i];
+                merged.units += units;
+                if (t.thingIDNumber < merged.sample.thingIDNumber)
+                    merged.sample = t;
+                planned[i] = merged;
+                return;
+            }
+            planned.Add(new PlannedCargo { def = t.def, units = units, sample = t });
+        }
+
+        /// <summary>One def's share of a planned sweep, with the stack its destination is probed from.</summary>
+        private struct PlannedCargo
+        {
+            /// <summary>The def being fetched.</summary>
+            public ThingDef def;
+
+            /// <summary>Units of it this sweep plans to pick up.</summary>
+            public int units;
+
+            /// <summary>Lowest-id stack of the def in the queue; the destination probe's subject.</summary>
+            public Thing sample;
+        }
+
+        // Reused per-def buffer for the job-start commit. [ThreadStatic] + lazy-init matches this assembly's
+        // hook-reachable scratch convention; cleared at use, never trusted empty, never aliased into job state.
+        [System.ThreadStatic] private static List<PlannedCargo> plannedScratch;
 
         public override IEnumerable<Toil> MakeNewToils()
         {
@@ -130,9 +250,8 @@ namespace HaulersDream
                     var t = queue[loadIndex].Thing;
                     // The playerForced primary may be forbidden (that's what forcing means); swept extras are
                     // never taken while forbidden. Stacks in someone's inventory (claimed mid-walk) are gone.
-                    bool forbiddenOk = t != null && !t.IsForbidden(pawn);
-                    if (!forbiddenOk && loadIndex == 0 && job.playerForced)
-                        forbiddenOk = true;
+                    bool forbiddenOk = t != null && (!t.IsForbidden(pawn)
+                        || SweepForbidPolicy.MayTakeWhileForbidden(job.playerForced, loadIndex == 0));
                     bool valid = t != null && t.Spawned && forbiddenOk
                                  && !(t.ParentHolder is Pawn_InventoryTracker)
                                  && counts != null && loadIndex < counts.Count && counts[loadIndex] > 0
@@ -172,14 +291,14 @@ namespace HaulersDream
             loadDecide.defaultCompleteMode = ToilCompleteMode.Instant;
             yield return loadDecide;
 
-            Toil loadGoto = ToilMaker.MakeToil("HD_Bulk_LoadGoto");
-            loadGoto.initAction = delegate
-            {
-                var t = job.GetTarget(StackInd).Thing;
-                if (t == null || !t.Spawned) { loadIndex++; JumpToToil(loadDecide); return; }
-                pawn.pather.StartPath(t, PathEndMode.ClosestTouch);
-            };
-            loadGoto.defaultCompleteMode = ToilCompleteMode.PatherArrival;
+            // The walk, with a per-tick forbidden re-check (#250): before this, nothing at all ran between
+            // StartPath and the arrival, so forbidding an UNSAFE stack mid-walk bought the player nothing —
+            // the colonist finished the trip (plus the pickup pause) and only then changed its mind. The
+            // anchor carve-out is the same one loadDecide above and take below apply, expressed once in
+            // SweepForbidPolicy so the three checkpoints cannot drift: a playerForced order licenses only its
+            // own slot-0 anchor to be taken while forbidden, never a stack HD swept into the same trip.
+            Toil loadGoto = SweepWalk.MakeToil(this, StackInd, "HD_Bulk_LoadGoto", loadDecide,
+                () => loadIndex++, () => loadIndex == 0);
             yield return loadGoto;
 
             // Vanilla-like pickup pause (#121): the wait-with-progress-bar vanilla's JobDriver_TakeInventory
@@ -210,7 +329,8 @@ namespace HaulersDream
                 // Forbiddance re-check at pickup time: the player may have forbidden the stack mid-walk
                 // (and the unload pass would later erase the forbid flag). Same exemption as loadDecide:
                 // the playerForced primary may be forbidden — that's what forcing means.
-                if (t.IsForbidden(pawn) && !(loadIndex == 0 && job.playerForced)) { loadIndex++; JumpToToil(loadDecide); return; }
+                if (t.IsForbidden(pawn) && !SweepForbidPolicy.MayTakeWhileForbidden(job.playerForced, loadIndex == 0))
+                { loadIndex++; JumpToToil(loadDecide); return; }
                 // Same re-check as loadDecide: a swept extra stored (best) mid-walk stays in storage.
                 if (loadIndex != 0 && t.IsInValidBestStorage()) { loadIndex++; JumpToToil(loadDecide); return; }
 

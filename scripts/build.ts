@@ -117,3 +117,48 @@ const drugPolicyAccess = Bun.spawn(['bun', resolve(import.meta.dir, 'check-drug-
 	cwd: repoRoot,
 })
 if ((await drugPolicyAccess.exited) !== 0) throw new Error('Drug-policy access check failed (see output above).')
+
+// Guard the forbid-mid-walk seam (issue #250 — a colonist kept walking all the way to an item the player had
+// just forbidden, and players forbid things that are UNSAFE). Eight drivers own a sweep walk; a hand-rolled
+// StartPath + PatherArrival toil runs NO code between departure and arrival, compiles clean, and passes every
+// unit test (the NUnit suite references only HaulersDream.Core and cannot reach a JobDriver). Fails the build
+// if a walk escapes SweepWalk.MakeToil, if that seam loses its per-tick AddPreTickAction / SweepForbidPolicy
+// routing, or if BulkHaul's decide+take checkpoints stop sharing the rule. See check-sweep-walk-guard.ts.
+const sweepWalk = Bun.spawn(['bun', resolve(import.meta.dir, 'check-sweep-walk-guard.ts')], {
+	stdout: 'inherit',
+	stderr: 'inherit',
+	cwd: repoRoot,
+})
+if ((await sweepWalk.exited) !== 0) throw new Error('Sweep-walk guard check failed (see output above).')
+
+// Guard the storage commitment seam (issues #114/#138/#162/#248 — several haulers each pocketing a full stack
+// for three units of room). HD strips vanilla's destination cell reservation, which also shrank every other
+// hauler's job.count; a single claim ledger behind StorageCommitments replaces it, reached through exactly two
+// Harmony adapters. A second capacity oracle, a lost adapter, an unreviewed commit site or a per-tick memo
+// behind the seam all compile clean and pass every unit test — HaulersDream.Tests references only
+// HaulersDream.Core, so it observes the decision rule and never the arguments the glue passes it.
+// See check-storage-commit-seam.ts.
+const storageCommitSeam = Bun.spawn(['bun', resolve(import.meta.dir, 'check-storage-commit-seam.ts')], {
+	stdout: 'inherit',
+	stderr: 'inherit',
+	cwd: repoRoot,
+})
+if ((await storageCommitSeam.exited) !== 0)
+	throw new Error('Storage-commit-seam check failed (see output above).')
+
+// Guard "a pawn the colony does not own must not reach this" at the two seams where it matters. HD offered
+// "Prioritize bulk unloading" on any pawn whose HostFaction was the player — vanilla's job-time predicate reused
+// as an OFFER predicate, which admits every Hospitality guest, rescued wanderer and guest-status quest pawn — and
+// the job then raised vanilla's own scribed UnloadEverything flag on the victim, opening vanilla's faction-blind
+// unload work-giver on it for every hauler on the map. One shared permission rule now gates all three entry
+// points, and the bulk loaders state their faction refusal explicitly instead of borrowing it from a Lord check.
+// None of that is visible to a unit test: HaulersDream.Tests references only HaulersDream.Core and cannot see a
+// Pawn at all, so an entry point that stops consulting the rule compiles clean and stays green.
+// See check-non-colony-pawn-gates.ts.
+const nonColonyGates = Bun.spawn(['bun', resolve(import.meta.dir, 'check-non-colony-pawn-gates.ts')], {
+	stdout: 'inherit',
+	stderr: 'inherit',
+	cwd: repoRoot,
+})
+if ((await nonColonyGates.exited) !== 0)
+	throw new Error('Non-colony-pawn gate check failed (see output above).')
