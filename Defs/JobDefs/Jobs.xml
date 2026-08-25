@@ -25,7 +25,7 @@
   </JobDef>
 
   <!-- Inventory-based construction delivery: load material into inventory, deliver in fewer trips.
-       NOTE: deliberately no <checkEncumbrance> — that would cap inventory loading at 100% capacity and
+       NOTE: deliberately no <checkEncumbrance>, that would cap inventory loading at 100% capacity and
        defeat smart overload (see JobDriver_OverloadConstructDeliver / Toils_Haul.TakeToInventory). -->
   <JobDef>
     <defName>HaulersDream_OverloadConstructDeliver</defName>
@@ -35,7 +35,7 @@
 
   <!-- Same driver as above, but this def also TETHERS the construction: when the delivery completes, the
        driver queues the next step on the same site (another material type, or vanilla FinishFrame once
-       buildable) at the front of the queue — so an ordered "construct X" hauls AND builds as one task. -->
+       buildable) at the front of the queue, so an ordered "construct X" hauls AND builds as one task. -->
   <JobDef>
     <defName>HaulersDream_ConstructDeliverBuild</defName>
     <driverClass>HaulersDream.JobDriver_OverloadConstructDeliver</driverClass>
@@ -50,11 +50,11 @@
   </JobDef>
 
   <!-- Batch a workbench bill: pre-load all reps' ingredients into inventory in one trip, craft them at the
-       bench, collect products into inventory, then unload. NOTE: deliberately no <checkEncumbrance> — that
+       bench, collect products into inventory, then unload. NOTE: deliberately no <checkEncumbrance>, that
        would cap inventory pre-loading at 100% capacity and defeat smart overload (see JobDriver_BatchCraft /
        Toils_Haul.TakeToInventory). -->
   <!-- suspendable false: a suspension (vomit, slave suppression) resumes via a FRESH driver whose handoff is
-       long consumed — it would silently shrink the rest of the batch to a 1-rep recovery. A clean end is better:
+       long consumed, it would silently shrink the rest of the batch to a 1-rep recovery. A clean end is better:
        leftovers/products are tagged + the finish action flushes them to storage. -->
   <JobDef>
     <defName>HaulersDream_BatchCraft</defName>
@@ -74,7 +74,7 @@
   </JobDef>
 
   <!-- Gather a crafting bill's ingredient stacks into inventory in one (overweight) sweep, end at the bench, and
-       let vanilla's own DoBill craft from the carried stock. NOTE: no <checkEncumbrance> — that would cap loading
+       let vanilla's own DoBill craft from the carried stock. NOTE: no <checkEncumbrance>, that would cap loading
        at 100% capacity and defeat the one-trip purpose (see JobDriver_BillPrepGather). -->
   <!-- suspendable false: a suspend/resume restarts the sweep on a FRESH driver at loadIndex 0, re-taking full
        bill counts on top of what's already in inventory (over-gather). A clean end recovers correctly instead:
@@ -87,7 +87,7 @@
   </JobDef>
 
   <!-- Bulk hauling (the native Pick-Up-And-Haul): walk the planned pickup chain loading every nearby haulable
-       into inventory, then force the single storage-aware unload pass — one trip for the whole sweep.
+       into inventory, then force the single storage-aware unload pass, one trip for the whole sweep.
        NOTE: checkEncumbrance is a field on the Job instance (not a JobDef tag) and is never set here; this
        driver also loads via its own SplitOff+TryAdd rather than Toils_Haul.TakeToInventory (which is what
        reads that flag), so the only loading cap is the smart-overload worth-it ceiling
@@ -112,7 +112,7 @@
     <suspendable>false</suspendable>
   </JobDef>
 
-  <!-- Load scooped/tagged inventory loot onto a pack animal — the away-map (caravan) counterpart to the
+  <!-- Load scooped/tagged inventory loot onto a pack animal, the away-map (caravan) counterpart to the
        storage unload. Optional sweep of nearby ground stacks into inventory (the manual bulk order) then a
        deposit pass transferring the tagged surplus into the carrier (see JobDriver_LoadPackAnimal). -->
   <!-- suspendable false: a suspend/resume restarts the sweep on a FRESH driver at loadIndex 0 (over-gather), as
@@ -125,10 +125,10 @@
     <suspendable>false</suspendable>
   </JobDef>
 
-  <!-- Pack-animal BULK UNLOAD — the inverse of the load above. Walk to a flagged carrier ONCE and pull many
+  <!-- Pack-animal BULK UNLOAD, the inverse of the load above. Walk to a flagged carrier ONCE and pull many
        stacks out of it into the hauler's backpack (tagged -> normal storage unload), with the last/overflow
        stack going to the hands (UNtagged -> hauled directly to storage). See JobDriver_UnloadCarrierInBulk. -->
-  <!-- suspendable false (like the other HD sweep jobs): a clean end recovers correctly — backpack stock is
+  <!-- suspendable false (like the other HD sweep jobs): a clean end recovers correctly, backpack stock is
        tagged and the finalize flushes it, and the hand-tail is already a queued HaulToStorage job. -->
   <!-- DELIBERATELY no <checkEncumbrance>: the fallback one-to-hands path may exceed 100% capacity, which that
        tag would forbid (mirrors the other no-encumbrance HD jobs). casualInterruptible false so a passing
@@ -142,12 +142,31 @@
     <suspendable>false</suspendable>
   </JobDef>
 
+  <!-- Transporter/shuttle BULK UNLOAD, the inverse of the transporter load above, and the building-side sibling
+       of the pack-animal unload: walk to a landed transporter ONCE (any CompTransporter parent with cargo, an
+       Odyssey shuttle, a pod with leftover load, a modded shuttle-like thing) and pull many stacks out of its
+       innerContainer into the hauler's backpack (tagged -> normal storage unload), with the last/overflow stack
+       going to the hands (UNtagged -> hauled directly to storage). Pawns in the hold are never pulled, they
+       leave via their own boarding/exit mechanics. Player-ordered only (vanilla has no autonomous transporter
+       unload to take over). See JobDriver_UnloadTransporterInBulk. -->
+  <!-- suspendable false + casualInterruptible false (like the other HD sweep jobs): a clean end recovers correctly
+      , backpack stock is tagged and the finalize flushes it, and the hand-tail is already a queued HaulToStorage
+       job. DELIBERATELY no <checkEncumbrance>: the fallback one-to-hands path may exceed 100% capacity (mirrors
+       HaulersDream_UnloadCarrierInBulk). -->
+  <JobDef>
+    <defName>HaulersDream_UnloadTransporterInBulk</defName>
+    <driverClass>HaulersDream.JobDriver_UnloadTransporterInBulk</driverClass>
+    <reportString>unloading a transporter.</reportString>
+    <casualInterruptible>false</casualInterruptible>
+    <suspendable>false</suspendable>
+  </JobDef>
+
   <!-- Bulk-load a transporter/shuttle group: claim a slice of the group manifest, sweep nearby ground stacks of
        the claimed defs into inventory (tagged), walk to the transporter ONCE, and deposit every needed stack via
        innerContainer.TryTransferToContainer (the precise SubtractFromToLoadList intercept settles the manifest).
        See JobDriver_LoadTransportersInBulk. -->
   <!-- DELIBERATELY no <checkEncumbrance>: the sweep loads past 100% via the smart-overload ceiling (like the other
-       no-encumbrance HD load jobs). suspendable false: a clean end recovers correctly — swept stacks are tagged and
+       no-encumbrance HD load jobs). suspendable false: a clean end recovers correctly, swept stacks are tagged and
        the finish action re-tags survivors + releases the claim; casualInterruptible false so a passing distraction
        can't strand a half-loaded courier (the claim is released + carried items ride the normal unload on any end). -->
   <JobDef>
@@ -161,11 +180,11 @@
   <!-- Bulk-load a map portal (pit gate / cave or vault exit / "enter map" portal): claim a slice of the portal's
        leftToLoad manifest, sweep nearby ground stacks of the claimed defs into inventory (tagged), walk to the
        portal ONCE, and deposit every needed stack via innerContainer.TryTransferToContainer through the portal's
-       PortalContainerProxy — which TELEPORTS/consumes the deposited Thing to the other map. The thing-less ledger
+       PortalContainerProxy, which TELEPORTS/consumes the deposited Thing to the other map. The thing-less ledger
        settle captures (def, count) BEFORE the transfer; the precise MapPortal.SubtractFromToLoadList intercept
        settles the manifest. See JobDriver_LoadPortalInBulk. -->
   <!-- DELIBERATELY no <checkEncumbrance>: the sweep loads past 100% via the smart-overload ceiling (like the other
-       no-encumbrance HD load jobs). suspendable false: a clean end recovers correctly — swept stacks are tagged and
+       no-encumbrance HD load jobs). suspendable false: a clean end recovers correctly, swept stacks are tagged and
        the finish action re-tags survivors + releases the claim; casualInterruptible false so a passing distraction
        can't strand a half-loaded courier (the claim is released + carried items ride the normal unload on any end). -->
   <JobDef>
@@ -176,15 +195,15 @@
     <suspendable>false</suspendable>
   </JobDef>
 
-  <!-- Bulk-load a Vehicle Framework vehicle (ground OR aerial — same cargoToLoad manifest + inventory container):
+  <!-- Bulk-load a Vehicle Framework vehicle (ground OR aerial, same cargoToLoad manifest + inventory container):
        claim a slice of the vehicle's cargoToLoad manifest, sweep nearby ground stacks of the claimed defs into
        inventory (tagged), walk to the vehicle ONCE, and deposit every needed stack via VF's VehiclePawn.AddOrTransfer
-       (reflection-only through VehicleFrameworkCompat — which fires CargoAdded AND decrements cargoToLoad by the
+       (reflection-only through VehicleFrameworkCompat, which fires CargoAdded AND decrements cargoToLoad by the
        clamped count, so there is NO SubtractFromToLoadList intercept). Single-target (no group). VF is a SOFT dep, so
-       this JobDef is harmless when VF is absent (nothing ever creates the job — VehicleLoadTarget.TryCreate returns
+       this JobDef is harmless when VF is absent (nothing ever creates the job, VehicleLoadTarget.TryCreate returns
        null and the feature is master/sub-toggle gated). See JobDriver_LoadVehicleInBulk. -->
   <!-- DELIBERATELY no <checkEncumbrance>: the sweep loads past 100% via the smart-overload ceiling (like the other
-       no-encumbrance HD load jobs). suspendable false: a clean end recovers correctly — swept stacks are tagged and
+       no-encumbrance HD load jobs). suspendable false: a clean end recovers correctly, swept stacks are tagged and
        the finish action re-tags survivors + releases the VRM/ledger claim; casualInterruptible false so a passing
        distraction can't strand a half-loaded courier (the claim is released + carried items ride the normal unload). -->
   <JobDef>
@@ -197,12 +216,12 @@
 
   <!-- Bulk-refuel a CompRefuelable (a shuttle's chemfuel, a deep drill, a generator, …): sweep enough nearby fuel
        stacks into inventory (tagged), walk to the refuelable ONCE, and deposit them all via vanilla
-       CompRefuelable.Refuel — instead of vanilla's one-stack-in-hands per walk. Standalone (no claim-ledger): a
+       CompRefuelable.Refuel, instead of vanilla's one-stack-in-hands per walk. Standalone (no claim-ledger): a
        refuelable has no shared manifest, and vanilla Refuel just consumes up to the deficit. See JobDriver_BulkRefuel. -->
   <!-- DELIBERATELY no <checkEncumbrance>: the sweep loads only what the refuel deficit needs, but like the other HD
        load jobs it stows via its own SplitOff+TryAdd (not Toils_Haul.TakeToInventory, which reads that flag).
        suspendable false: a suspend/resume would restart the sweep on a FRESH driver at loadIndex 0, re-taking the
-       queued fuel on top of what's already carried (over-gather). A clean end recovers correctly instead — swept fuel
+       queued fuel on top of what's already carried (over-gather). A clean end recovers correctly instead, swept fuel
        is tagged and the finish action re-tags survivors so leftover rides the normal unload. casualInterruptible
        false so a passing distraction can't strand a half-swept courier (the carried fuel rides the normal unload on
        any end). -->
