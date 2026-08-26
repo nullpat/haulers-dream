@@ -2,7 +2,7 @@
 <LanguageData>
 
   <!-- JobDef report strings (the "doing X" text shown under a selected pawn). The English source is also the
-       def value in Defs/JobDefs/Jobs.xml; this file is the canonical translation template, copy it to
+       def value in Defs/JobDefs/Jobs.xml; this file is the canonical translation template — copy it to
        Languages/<Language>/DefInjected/JobDef/Jobs.xml and translate the values. -->
 
   <HaulersDream_UnloadInventory.reportString>正在卸下背包物品。</HaulersDream_UnloadInventory.reportString>

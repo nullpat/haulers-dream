@@ -15,7 +15,7 @@ namespace HaulersDream
             if (lv == 0) return "HaulersDream.Overload.Free".Translate();
             if (lv >= OverloadTuning.OffLevel) return "HaulersDream.Overload.Off".Translate();
             if (lv == OverloadTuning.FairLevel) return "HaulersDream.Overload.Fair".Translate();
-            // Show only the word tier (Eager / Fair / Cautious), the numeric "(N)" is dropped from the readout.
+            // Show only the word tier (Eager / Fair / Cautious) — the numeric "(N)" is dropped from the readout.
             // The XML values for these keys no longer carry a {0} placeholder, so no argument is passed.
             return lv < OverloadTuning.FairLevel
                 ? "HaulersDream.Overload.Eager".Translate()
@@ -52,7 +52,7 @@ namespace HaulersDream
         // ===== 3-pane settings window (icon nav · options · info panel), styled after Camera+ =====
         // Replaces the old tabbed Listing_Standard window. The scroll height is the TRUE measured content
         // height (SettingsCtx.CurY), and sub-options are GREYED (not hidden) when their master is off, so the
-        // page height is constant for a given settings state, no more scroll-height collapse / clipped rows.
+        // page height is constant for a given settings state — no more scroll-height collapse / clipped rows.
         private enum SettingsCat
         {
             Features,     // master on/off hub for every incorporated feature family (cards)
@@ -65,7 +65,7 @@ namespace HaulersDream
             Who,          // pawn eligibility + work-incapability overrides
             Planners,     // route + crafting planner tuning
             Advanced,     // unload timing, safety net, dev tools
-            Migration,    // (conditional, pinned to the BOTTOM) clean-transition guide, only when a replaced mod is active
+            Migration,    // (conditional, pinned to the BOTTOM) clean-transition guide — only when a replaced mod is active
         }
 
         private struct CatDef
@@ -163,7 +163,7 @@ namespace HaulersDream
             // Take over the window chrome: the vanilla Dialog_ModSettings sets a corner X (no padding) + a redundant
             // bottom "Close" button. We suppress both (settings still save on PreClose however the window closes) and
             // draw our own padded X. doCloseButton is read AFTER this method (effective now); doCloseX is read before
-            // (effective next frame, a one-frame flash at most). Also keep the large window draggable.
+            // (effective next frame — a one-frame flash at most). Also keep the large window draggable.
             var win = Find.WindowStack?.currentlyDrawnWindow;
             if (win != null)
             {
@@ -202,7 +202,7 @@ namespace HaulersDream
 
             // Mid-game multiplayer guard: in an ACTIVE MP session HD's settings are host-authoritative (shipped to
             // clients at join), so a player editing them mid-session would silently desync only THIS client. Draw an
-            // explanatory message and skip ALL editable controls (profile selector + the three option columns), fully
+            // explanatory message and skip ALL editable controls (profile selector + the three option columns) — fully
             // removing the desync vector. The window still closes via the X above. MultiplayerCompat.InMultiplayerGame
             // short-circuits on Active, so reading it here touches no Multiplayer.API type when MP is absent (and is
             // always false in single-player). See MultiplayerCompat / the mod description.
@@ -219,7 +219,7 @@ namespace HaulersDream
                 return;
             }
 
-            // Profile selector, to the right of the logo, clear of the X.
+            // Profile selector — to the right of the logo, clear of the X.
             float profX = logoRect.xMax + 16f;
             float profRight = fullW - 40f;
             float profW = Mathf.Min(300f, profRight - profX);
@@ -240,7 +240,7 @@ namespace HaulersDream
             float helpW = Mathf.Clamp(body.width * 0.26f, 200f, 290f);
 
             // Reserve a 28px strip above the nav column for the search box and shrink the nav's y/height to match.
-            // (Suppressed in MP: the body is already locked there, so we'd have returned above, but keep nav full-
+            // (Suppressed in MP: the body is already locked there, so we'd have returned above — but keep nav full-
             // height in that case for safety; we never reach here in MP because of the early return.)
             var searchRect = new Rect(body.x, body.y, navW, 28f);
             var navRect = new Rect(body.x, body.y + 32f, navW, body.height - 32f);
@@ -299,7 +299,7 @@ namespace HaulersDream
         // The fuzzy-search box above the nav column. A plain text field full-width; a greyed placeholder when empty;
         // a small "×" clear button (over the right edge) when it has text. Editing the query invalidates the cached
         // registry/results lazily (the registry is (re)built in DrawContent, the scores recomputed when the text
-        // changes). Suppressed in an active multiplayer session (the body is locked, we also early-return before
+        // changes). Suppressed in an active multiplayer session (the body is locked — we also early-return before
         // ever reaching here in MP, but the guard keeps the search inert if that path ever changes).
         private void DrawSearchBox(Rect rect)
         {
@@ -360,7 +360,7 @@ namespace HaulersDream
             var anchor = Text.Anchor;
             foreach (var cd in cats)
             {
-                // The Migration row is conditional + bottom-pinned, drawn separately below, not inline.
+                // The Migration row is conditional + bottom-pinned — drawn separately below, not inline.
                 if (cd.cat == SettingsCat.Migration)
                     continue;
                 DrawNavRow(new Rect(inner.x, y, inner.width, rowH), cd, rowH, tint: null);
@@ -462,7 +462,7 @@ namespace HaulersDream
             }
         }
 
-        // The always-visible "Report issue" action row. It is NOT a category, it never becomes "selected" and has
+        // The always-visible "Report issue" action row. It is NOT a category — it never becomes "selected" and has
         // no content panel; clicking it opens the report dialog. Styled a touch quieter than the tabs (lower-alpha
         // bug icon + label) so it doesn't pull focus, while still showing a hover highlight so it reads as clickable.
         private void DrawReportRow(Rect row, float rowH)
@@ -502,7 +502,7 @@ namespace HaulersDream
         private const float ContentScrollbarW = 16f;
         private const float ContentRightGutter = 12f;
 
-        // Dispatch one tab's content into a SettingsCtx (real draw or, when c.Collecting, a layout-only pass).
+        // Dispatch one tab's content into a SettingsCtx (real draw or — when c.Collecting — a layout-only pass).
         private void DrawCat(SettingsCtx c, SettingsCat cat)
         {
             switch (cat)
@@ -596,7 +596,7 @@ namespace HaulersDream
             }
             searchRegistry = cc.Sink;
             // Precompute each entry's lower-cased Name/Desc ONCE, here at registry-build time, so the per-keystroke
-            // scoring pass (EnsureScored) never re-lower-cases these ~135×2 fixed strings, the FPS fix for #138.
+            // scoring pass (EnsureScored) never re-lower-cases these ~135×2 fixed strings — the FPS fix for #138.
             for (int k = 0; k < searchRegistry.Count; k++)
             {
                 var oe = searchRegistry[k];
@@ -644,7 +644,7 @@ namespace HaulersDream
             scoredForQuery = searchQuery;
 
             // Fix B: the (CatId, Header) grouping is a pure function of scoredResults, which is recomputed only when
-            // the query changes (or the registry is rebuilt, both funnel through here). Build it ONCE now instead of
+            // the query changes (or the registry is rebuilt — both funnel through here). Build it ONCE now instead of
             // re-allocating a List + Dictionary + a HashSet per group on EVERY OnGUI frame in DrawSearchResults.
             BuildResultGroups();
         }
@@ -692,7 +692,7 @@ namespace HaulersDream
         {
             public int CatId;
             public string Header;        // section header text (may be null)
-            public OptionEntry Best;     // first (= highest-scoring) member encountered, the navigate target
+            public OptionEntry Best;     // first (= highest-scoring) member encountered — the navigate target
             public readonly HashSet<int> Ordinals = new HashSet<int>();
         }
 
@@ -700,7 +700,7 @@ namespace HaulersDream
         // grouped by (CatId, Header) and the groups ordered by max member score DESC (= first-appearance order, since
         // scoredResults is already sorted desc). For each group we draw an HDSettingsUI-style section header (icon +
         // heading; the WHOLE bar navigates to the best member) then re-run the tab's Draw*Cat filtered to that group's
-        // ordinals (SettingsCtx.RenderOrdinals), so the controls are the genuine bindings, fully editable. Section
+        // ordinals (SettingsCtx.RenderOrdinals), so the controls are the genuine bindings — fully editable. Section
         // height is measured/cached (searchResultsHeight) the same way the tabs use catHeight, since the filtered
         // controls' height isn't known until drawn.
         private void DrawSearchResults(Rect rect)
@@ -729,9 +729,9 @@ namespace HaulersDream
             }
 
             // ---- grouping: built ONCE per query in EnsureScored (Fix B), just read here ----
-            // (was freshly allocating a List + Dictionary + a HashSet per group EVERY frame, issue #138). The cache
+            // (was freshly allocating a List + Dictionary + a HashSet per group EVERY frame — issue #138). The cache
             // is kept in lock-step with scoredResults; the guard rebuilds defensively only if it is somehow absent
-            // while results exist (shouldn't happen, the reset sites null both together), degrading to the old
+            // while results exist (shouldn't happen — the reset sites null both together), degrading to the old
             // per-frame build rather than crashing.
             if (groupedResults == null)
                 BuildResultGroups();
@@ -755,7 +755,7 @@ namespace HaulersDream
             for (int gi = 0; gi < groups.Count; gi++)
             {
                 var g = groups[gi];
-                // Generous breathing room between sections, more than the normal 32px Header gap, so the top
+                // Generous breathing room between sections — more than the normal 32px Header gap — so the top
                 // results stand out. A lighter lead-in before the very first group; a wider gap between sections.
                 c.Gap(gi == 0 ? 22f : 40f);
 
@@ -802,7 +802,7 @@ namespace HaulersDream
 
         // A search-results SECTION header drawn through the shared layout cursor, mirroring HDSettingsUI.Header's bar:
         // a 26px grey box, the category icon (~text height, vertically centred) + ONLY the section heading title (no
-        // "<Tab>, " prefix). The WHOLE bar is clickable -> Navigate to the group's best member (switch tab + scroll
+        // "<Tab> — " prefix). The WHOLE bar is clickable -> Navigate to the group's best member (switch tab + scroll
         // + highlight). A faint hover wash signals it's clickable.
         private void DrawResultSectionHeader(SettingsCtx c, ResultGroup g)
         {
@@ -812,7 +812,7 @@ namespace HaulersDream
 
             var cd = cats[g.CatId];
             var icon = IconFor(cd);
-            const float iconSize = 18f; // ~text height, not much taller than the label
+            const float iconSize = 18f; // ~text height — not much taller than the label
             var iconBox = new Rect(r.x + 6f, r.y + (r.height - iconSize) / 2f, iconSize, iconSize);
             if (icon != null)
             {
@@ -822,8 +822,8 @@ namespace HaulersDream
                 GUI.color = icol;
             }
 
-            // ONLY the heading title (drop the "<Tab>, " prefix). Fall back to the tab name for headerless controls
-            // (rare, most controls live under a section header).
+            // ONLY the heading title (drop the "<Tab> — " prefix). Fall back to the tab name for headerless controls
+            // (rare — most controls live under a section header).
             string title = g.Header.NullOrEmpty() ? cd.nameKey.Translate().ToString() : g.Header;
             var labelRect = new Rect(iconBox.xMax + 8f, r.y, r.xMax - iconBox.xMax - 10f, r.height);
             var f = Text.Font;
@@ -952,7 +952,7 @@ namespace HaulersDream
         }
 
         // A small line graph of move-speed multiplier (y) vs carry weight (x, % of max capacity) for the current
-        // smart-overload level, the EXACT curve OverloadTuning.SpeedFactor computes, with the carry ceiling and
+        // smart-overload level — the EXACT curve OverloadTuning.SpeedFactor computes — with the carry ceiling and
         // the speed floor marked. Drawn in the info panel while the Smart-overload slider is hovered.
         private static void DrawOverloadGraph(Rect rect, int level)
         {
@@ -999,7 +999,7 @@ namespace HaulersDream
                 prev = p;
             }
 
-            // carry ceiling marker, where overloading stops paying off (the smart load target)
+            // carry ceiling marker — where overloading stops paying off (the smart load target)
             float ceiling = OverloadTuning.MaxOverloadRatio(level);
             if (!float.IsInfinity(ceiling) && ceiling > xMin && ceiling <= xMax)
             {
@@ -1018,7 +1018,7 @@ namespace HaulersDream
 
         // ===== helpers for readouts =====
         private static string Tiles(int n) => "HaulersDream.Unit.Tiles".Translate(n);
-        // (Ticks readout helper removed, its three callers now show in-game hours / seconds directly.)
+        // (Ticks readout helper removed — its three callers now show in-game hours / seconds directly.)
         private static string Hours(float h) => "HaulersDream.Unit.Hours".Translate(h.ToString("0.#"));
         private static string OffLabel => "HaulersDream.Common.Off".Translate();
 
@@ -1037,7 +1037,7 @@ namespace HaulersDream
         // ===================== MIGRATION (conditional clean-transition guide) =====================
         // Reachable only when ModReplacements.AnyActive (the nav row is hidden + DrawContent redirects otherwise), so
         // ActiveNames is non-empty here. Lists the replaced mods the user still has active, offers a one-click
-        // disable-and-restart, and gives the safe manual order to remove them, a switcher running a replaced mod
+        // disable-and-restart, and gives the safe manual order to remove them — a switcher running a replaced mod
         // alongside HD is the usual "pickup looks broken after switching" cause (they fight over the same hauling
         // jobs; see COMPATIBILITY.md).
         private void DrawMigrationCat(SettingsCtx c)
@@ -1052,7 +1052,7 @@ namespace HaulersDream
             c.Gap(6f);
 
             // One-click: disable every detected replaced mod and restart (the only way a mod-list change takes
-            // effect, exactly what the vanilla Mods menu does). Confirmed first, with a clear save/draft warning,
+            // effect — exactly what the vanilla Mods menu does). Confirmed first, with a clear save/draft warning,
             // because it restarts RimWorld immediately.
             HDSettingsUI.Button(c, "HaulersDream.Migration.DisableButton".Translate(),
                 () =>
@@ -1142,7 +1142,7 @@ namespace HaulersDream
                 strictCarryWeight, "HaulersDream.Setting.StrictCarryWeightDesc".Translate());
 
             // Pick-up handling moved to per-category yield behaviour (Work & yields tab). The lone bleeding-skip
-            // toggle that remained no longer warrants its own one-item "Pick-up" header, it now sits with the
+            // toggle that remained no longer warrants its own one-item "Pick-up" header — it now sits with the
             // carry-weight controls above it (header removed; the toggle itself is unchanged).
             skipHaulWhileBleeding = HDSettingsUI.Checkbox(c, "HaulersDream.Setting.SkipHaulWhileBleeding".Translate(),
                 skipHaulWhileBleeding, "HaulersDream.Setting.SkipHaulWhileBleedingDesc".Translate());
@@ -1168,7 +1168,7 @@ namespace HaulersDream
             // against a default ~96 kg ceiling, so two never fit. These shape WHICH bodies batch and WHO batches
             // them; every default is a deliberate no-op (allowance ×1.0, no weight cap, all three haulers allowed),
             // so nobody sees a change until they opt in. Sub-options of the corpse toggle above, hence the chained
-            // `bulkHaul && bulkHaulCorpses` predicate, the file uses one indent level throughout, so a deeper
+            // `bulkHaul && bulkHaulCorpses` predicate — the file uses one indent level throughout, so a deeper
             // group is expressed by narrowing `enabled:` rather than by indenting further.
             string corpseAllowanceLabel = (corpseCarryAllowance <= 1.0f
                 ? "HaulersDream.Setting.CorpseCarryAllowance.Off".Translate()
@@ -1331,15 +1331,15 @@ namespace HaulersDream
                 shareForCrafting, "HaulersDream.Setting.ShareForCraftingDesc".Translate());
             inventoryCraftDeliver = HDSettingsUI.Checkbox(c, "HaulersDream.Setting.InventoryCraftDeliver".Translate(),
                 inventoryCraftDeliver, "HaulersDream.Setting.InventoryCraftDeliverDesc".Translate(), enabled: shareForCrafting, indent: 24f);
-            // #243: when another mod is doing the ingredient gathering, neither checkbox above can stop it, say so
+            // #243: when another mod is doing the ingredient gathering, neither checkbox above can stop it — say so
             // here, where the player comes to turn it off, rather than letting them conclude the settings are
             // broken. Only the foreign-gatherer caveat belongs on this tab: the "HD's own gather is switched off"
             // caveat that the per-bench button also shows would just restate the checkbox sitting right above it.
             if (GatherNotice.Current == BenchGatherNotice.ForeignModGathers)
                 HDSettingsUI.Note(c, GatherNotice.Text(BenchGatherNotice.ForeignModGathers), indent: 24f);
-            // Deliberately TOP-LEVEL, no `enabled:` gate and no indent, even though it sits under the gather
+            // Deliberately TOP-LEVEL — no `enabled:` gate and no indent, even though it sits under the gather
             // settings it relates to (issue #230). The per-bench switch also governs BATCH gathering, and the batch
-            // route never reads inventoryCraftDeliver, so chaining this control to that setting would hide the
+            // route never reads inventoryCraftDeliver — so chaining this control to that setting would hide the
             // only per-bench brake on batching in the exact configuration where batching is all that still gathers.
             showBenchGatherGizmo = HDSettingsUI.Checkbox(c, "HaulersDream.Setting.ShowBenchGatherGizmo".Translate(),
                 showBenchGatherGizmo, "HaulersDream.Setting.ShowBenchGatherGizmoDesc".Translate());
@@ -1365,7 +1365,7 @@ namespace HaulersDream
                 medicineFromVehiclesAway = HDSettingsUI.Checkbox(c, "HaulersDream.Setting.MedicineFromVehiclesAway".Translate(),
                     medicineFromVehiclesAway, "HaulersDream.Setting.MedicineFromVehiclesAwayDesc".Translate());
             }
-            // #229: a top-level option in the Build & Craft tab's Food section (NOT indented under Meals on Wheels, 
+            // #229: a top-level option in the Build & Craft tab's Food section (NOT indented under Meals on Wheels —
             // it is a separate leg, drugs not food, and does not depend on that toggle).
             drugsForWithdrawal = HDSettingsUI.Checkbox(c, "HaulersDream.Setting.DrugsForWithdrawal".Translate(),
                 drugsForWithdrawal, "HaulersDream.Setting.DrugsForWithdrawalDesc".Translate());
@@ -1441,7 +1441,7 @@ namespace HaulersDream
             loadPathfindingCandidates = Mathf.RoundToInt(HDSettingsUI.Slider(c, "HaulersDream.Setting.LoadPathfindingCandidates.Lab".Translate(),
                 loadPathfindingCandidates, 2f, 24f, loadPathfindingCandidates.ToString(),
                 "HaulersDream.Setting.LoadPathfindingCandidates.Help".Translate(), enabled: loadHybridPathing, indent: 24f));
-            // Storage Network bulk-load (experimental, default off), only shown when Storage Network is installed.
+            // Storage Network bulk-load (experimental, default off) — only shown when Storage Network is installed.
             if (StorageNetworkCompat.IsActive)
                 enableStorageNetworkBulkLoad = HDSettingsUI.Checkbox(c, "HaulersDream.Setting.EnableStorageNetworkBulkLoad".Translate(),
                     enableStorageNetworkBulkLoad, "HaulersDream.Setting.EnableStorageNetworkBulkLoadDesc".Translate());
@@ -1537,7 +1537,7 @@ namespace HaulersDream
             var rAnimals = new YieldMatrixRow { Label = "HaulersDream.Setting.Yield.Animals".Translate(), Help = "HaulersDream.Setting.Yield.AnimalsHelp".Translate(), Value = (int)yieldAnimals };
             var rStrip = new YieldMatrixRow { Label = "HaulersDream.Setting.Yield.Strip".Translate(), Help = "HaulersDream.Setting.Yield.StripHelp".Translate(), Value = yieldStrip == YieldBehavior.Disabled ? 0 : 1, AllowDirect = false };
             var rUninstall = new YieldMatrixRow { Label = "HaulersDream.Setting.Yield.Uninstall".Translate(), Help = "HaulersDream.Setting.Yield.UninstallHelp".Translate(), Value = (int)yieldUninstall };
-            // Fishing (Odyssey only): the catch from a fishing spot. Shown ONLY when ModsConfig.OdysseyActive, the
+            // Fishing (Odyssey only): the catch from a fishing spot. Shown ONLY when ModsConfig.OdysseyActive — the
             // mechanic needs the Odyssey DLC, so without it the row would just confuse the player.
             var rFishing = new YieldMatrixRow { Label = "HaulersDream.Setting.Yield.Fishing".Translate(), Help = "HaulersDream.Setting.Yield.FishingHelp".Translate(), Value = (int)yieldFishing };
 
@@ -1559,11 +1559,11 @@ namespace HaulersDream
             yieldStrip = rStrip.Value == 0 ? YieldBehavior.Disabled : YieldBehavior.DropThenHaul;
             yieldUninstall = (YieldBehavior)rUninstall.Value;
             // Only read the Fishing row back when it was actually shown (otherwise its untouched Value would just
-            // re-assign the current default, harmless, but only persist a real player edit on Odyssey).
+            // re-assign the current default — harmless, but only persist a real player edit on Odyssey).
             if (ModsConfig.OdysseyActive)
                 yieldFishing = (YieldBehavior)rFishing.Value;
 
-            // While working, what a pawn does about its load WHILE producing results. Moved here from the Hauling tab
+            // While working — what a pawn does about its load WHILE producing results. Moved here from the Hauling tab
             // to sit next to the yields it governs; same fields/keys/behaviour, only the location changed.
             HDSettingsUI.Header(c, "HaulersDream.Head.WhileWorking".Translate());
             sweepNearbyWhileWorking = HDSettingsUI.Checkbox(c, "HaulersDream.Setting.SweepNearbyWhileWorking".Translate(),
@@ -1604,7 +1604,7 @@ namespace HaulersDream
                 stripBeforeCremation, "HaulersDream.Setting.StripBeforeCremationDesc".Translate());
 
             // Tainted-apparel policy applies to gear removed during ANY strip (auto-strip-while-hauling above, or a
-            // manual Strip order, the "Stripping (removed gear)" yield row at the top of this tab).
+            // manual Strip order — the "Stripping (removed gear)" yield row at the top of this tab).
             bool taintedShown = autoStripMode != AutoStripMode.Off || yieldStrip != YieldBehavior.Disabled || stripBeforeCremation;
             int ts = HDSettingsUI.Segmented(c, "HaulersDream.Setting.TaintedSmeltable.Lab".Translate(),
                 (int)taintedSmeltablePolicy, TaintedOptionLabels(), TaintedOptionHelps(),
@@ -1689,7 +1689,7 @@ namespace HaulersDream
             craftBatchTimeoutHours = Mathf.Round(HDSettingsUI.Slider(c, "HaulersDream.Setting.CraftBatchTimeout.Lab".Translate(),
                 craftBatchTimeoutHours, 0f, 8f, craftBatchTimeoutHours <= 0f ? OffLabel : Hours(craftBatchTimeoutHours),
                 "HaulersDream.Setting.CraftBatchTimeout.Help".Translate()) * 2f) / 2f;
-            // Common Sense compat opt-in, only meaningful (and only shown) when Common Sense is installed.
+            // Common Sense compat opt-in — only meaningful (and only shown) when Common Sense is installed.
             if (CommonSenseCompat.IsActive)
                 allowBatchUnderCommonSense = HDSettingsUI.Checkbox(c, "HaulersDream.Setting.AllowBatchUnderCommonSense".Translate(),
                     allowBatchUnderCommonSense, "HaulersDream.Setting.AllowBatchUnderCommonSenseDesc".Translate());

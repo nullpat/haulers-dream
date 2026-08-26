@@ -8,9 +8,9 @@ namespace HaulersDream
 {
     // [StaticConstructorOnStartup]: this type holds static Texture2D fields (the settings header + per-category
     // icon caches, in the .Window.cs partial). RimWorld warns about any type with a static Texture2D/Material field
-    // that lacks this attribute, a structural check that fires even though those textures are loaded lazily on the
+    // that lacks this attribute — a structural check that fires even though those textures are loaded lazily on the
     // main thread during the settings window draw. The attribute satisfies the check (its other static initializers
-    // are plain data, translation KEYS, sizes, empty caches, so running the type initializer at startup is inert);
+    // are plain data — translation KEYS, sizes, empty caches — so running the type initializer at startup is inert);
     // the texture fields stay null until the lazy properties first build them when the window opens.
     [StaticConstructorOnStartup]
     public partial class HaulersDreamSettings : ModSettings
@@ -18,15 +18,15 @@ namespace HaulersDream
         // --- master enable (no restart): the kill switch for HD's AUTOMATIC hauling behaviour. Default ON. Read
         // live via MasterEnable.Active so it takes effect without a restart.
         //
-        // What it covers: the AUTOMATIC intake entry points stop INITIATING new behaviour, the yield scoop and
+        // What it covers: the AUTOMATIC intake entry points stop INITIATING new behaviour — the yield scoop and
         // area-cleanup sweep (YieldRouter), bulk haul, urgent-haul bulk, en-route pickup, bulk refuel, and the
         // closer-storage relocation (StorageRouting). Each reads MasterEnable.Active at its own entry.
         //
         // What it deliberately does NOT cover, and must not be described as covering:
-        //   * unloading, a pawn already carrying scooped goods STILL unloads and the Unload gizmo stays
+        //   * unloading — a pawn already carrying scooped goods STILL unloads and the Unload gizmo stays
         //     available (conflict guard G1: gating the shared unload funnel would strand carried goods);
         //   * the work-incapability overrides (see the note in WorkOverride);
-        //   * the crafting-ingredient GATHER routes, Patch_WorkGiver_DoBill_InventoryRoute (BillPrepGather),
+        //   * the crafting-ingredient GATHER routes — Patch_WorkGiver_DoBill_InventoryRoute (BillPrepGather),
         //     Patch_WorkGiver_DoBill_BatchRoute (BatchCraft) and the player-ordered "Plan prioritized crafting"
         //     read their own settings and the per-bench "Gather ingredients" switch, never MasterEnable.Active.
         // So this is NOT "disable ALL of Hauler's Dream", which is what this comment used to say and what the
@@ -52,33 +52,33 @@ namespace HaulersDream
         // vanilla addiction drugs + auto-detected Simple Sidearms / Smart Medicine / Dub's Bad Hygiene kept items),
         // and only stacks that have a real storage destination; caravan-loading inventory (IsFormingCaravan) is
         // left alone. DEFAULT OFF: out of the box HD only unloads what it scooped itself, so it never touches a
-        // colonist's sidearms / carried medicine / water / traded goods, robust against every keep-mod, present
+        // colonist's sidearms / carried medicine / water / traded goods — robust against every keep-mod, present
         // or future. Turn ON for the convenience of auto-hauling foreign surplus (e.g. traded jade) to storage;
         // the keep-item detection above keeps that safe with the supported mods.
         public bool unloadAllSurplus = false;
         // Per-item unload rules (mod options → "Individual Item Unload Settings", a stockpile-style categorized
         // picker). Each entry sets how HD treats one item def in a pawn's inventory: keep the whole stack (never
-        // unload), keep at most N units (unload the excess), or always unload it, overriding HD's auto-detected
+        // unload), keep at most N units (unload the excess), or always unload it — overriding HD's auto-detected
         // keep-mods and the global "unload surplus" toggle for that def. Stored as defName-keyed STRINGS encoded
         // "defName|modeInt|amount", NOT ThingDef refs: a modded item's rule survives the mod being removed (it
         // simply never matches a live item), is restored automatically if the mod returns, and can never break
         // save loading. The picker (Dialog_ItemUnloadSettings) edits a defName->rule dictionary built from this.
         public List<string> itemUnloadRules = new List<string>();
         [System.NonSerialized] private Dictionary<string, ItemUnloadRule> ruleMap; // lazy O(1) decode cache
-        // Legacy (pre-1.1.x) "never unload" list, read once on load and migrated into itemUnloadRules as KeepAll
+        // Legacy (pre-1.1.x) "never unload" list — read once on load and migrated into itemUnloadRules as KeepAll
         // rules, then never written again. Kept only so older configs upgrade losslessly.
         [System.NonSerialized] private List<string> keepDefNames;
 
         // "Put it away before relaxing": when a pawn finishes its work run and is about to rest, recreate, or
         // eat, it makes its unload trip FIRST (bypassing the accumulate window), instead of carrying the load
-        // to bed / the dinner table / the rec room. Continuous/intermittent work still accumulates, these only
+        // to bed / the dinner table / the rec room. Continuous/intermittent work still accumulates — these only
         // fire once the pawn stops working and heads into the matching downtime. One toggle per activity.
         public bool unloadBeforeSleep = true;
         public bool unloadBeforeLeisure = true;
         public bool unloadBeforeEating = true;
         public bool shareForBuilding = true;  // carried materials count for construction
         // Build From Inventory: source construction material from ORGANIC inventory a pawn/animal is already
-        // carrying (own → other colonists' → pack animals' / caravan cargo), not just HD-tagged scooped stock, 
+        // carrying (own → other colonists' → pack animals' / caravan cargo), not just HD-tagged scooped stock —
         // so steel carried in a caravan builds a sandbag/wall on a raid without first dropping it off a pack
         // animal. Extends the construction availability gate + the inventory-fetch to consider pre-existing
         // organic inventory; delivery uses the clean inventory→site HaulToContainer driver (no drop-at-feet).
@@ -87,7 +87,7 @@ namespace HaulersDream
         // DEFAULT ON: it only ADDS a source and (partial off) never starts an under-resourced frame, so it
         // delivers the headline use-case out of the box without changing vanilla's all-or-nothing build rule.
         public bool buildFromInventory = true;
-        // Partial build from inventory: relax vanilla's "all materials must be present" gate, start/advance a
+        // Partial build from inventory: relax vanilla's "all materials must be present" gate — start/advance a
         // frame from whatever inventory stock exists even if it's less than the frame's full need (the rest is
         // delivered as more becomes available). Changes vanilla's all-or-nothing semantics (a vanilla-semantics
         // change, like unloadAllSurplus / shareHandHauledToStorage / batchByDefault), so OFF by default. Requires
@@ -111,7 +111,7 @@ namespace HaulersDream
         public bool shareHandHauledToStorage = false; // let a worker claim a stack a colonist is hand-hauling TO STORAGE (opt-in)
         // Meals On Wheels: a hungry FREE COLONIST with no food found by vanilla eats acceptable food
         // another player-faction pawn (or pack animal) is carrying, instead of trekking to a distant
-        // stockpile, fewer trips. Only when vanilla's own food search came up empty (never overrides a
+        // stockpile — fewer trips. Only when vanilla's own food search came up empty (never overrides a
         // good map/own-inventory/pack-animal meal). Stricter than the reference mod: drafted/downed/mental
         // HOLDERS are skipped, a baby's food being hand-fed is left alone, the STACK is reserved (not just
         // the holder) so two eaters can't race one meal, and rot-priority prefers a carried meal about to
@@ -120,7 +120,7 @@ namespace HaulersDream
 
         // --- AWAY-FROM-HOME sourcing from VEHICLES (nomad support). Opt-in, default OFF. On a NON-HOME map only,
         // let a pawn draw from a Vehicle Framework vehicle's cargo the same way it already can from a pack animal
-        // (a mobile store), so a nomad camp is fed / built / tended from the wagons you brought, without unpacking.
+        // (a mobile store) — so a nomad camp is fed / built / tended from the wagons you brought, without unpacking.
         // At home a parked vehicle's cargo stays a curated loadout HD never touches (the [MOW]/[ORG] skips hold);
         // these options only relax that skip while away. All require VehicleFrameworkCompat.IsActive and no-op with
         // VF absent. eatFromVehiclesAway extends Meals On Wheels; buildFromVehiclesAway extends Build From Inventory;
@@ -131,11 +131,11 @@ namespace HaulersDream
         public bool buildFromVehiclesAway = false;
 
         // --- KEPT-DRUG WITHDRAWAL ACCESS (issue #229). Every vanilla drug search is spawned-only or
-        // colony-ANIMAL-only, so a drug in a COLONIST's inventory is invisible to an addict, and HD pins one
+        // colony-ANIMAL-only, so a drug in a COLONIST's inventory is invisible to an addict — and HD pins one
         // there permanently ("Keep in inventory" + the #81 drop guards), which vanilla never allows (its
         // drop-unused loop sheds any drug a colonist has no reason to hold). This lets a colonist craving or
         // withdrawing from a drug they're addicted to walk to a colleague and take a SINGLE dose, but only from
-        // stacks HD ITSELF pinned, a drug vanilla put in an inventory stays as unreachable as in vanilla, so the
+        // stacks HD ITSELF pinned — a drug vanilla put in an inventory stays as unreachable as in vanilla, so the
         // fix is scoped to the lockout HD created and rebalances nothing. Default ON: it undoes an HD-caused
         // regression, not a vanilla rule. See Patch_JobGiver_SatisfyChemicalNeed.
         public bool drugsForWithdrawal = true;
@@ -149,12 +149,12 @@ namespace HaulersDream
 
         // --- planners (the right-click "Plan prioritized …" tools) ---
         public bool planRoutes = true;   // route planner (harvest/mine/clean/deconstruct/construction routes)
-        // "Remember plan" interface toggle (bottom-right play-settings row), the MASTER SWITCH for one-click
+        // "Remember plan" interface toggle (bottom-right play-settings row) — the MASTER SWITCH for one-click
         // remembered routes. When ON (the default), a target type that has an explicit remembered template (saved via
-        // the "Remember" button in a plan dialog, see rememberedRoutesByDef) shows "Plan prioritized … (remembered)"
+        // the "Remember" button in a plan dialog — see rememberedRoutesByDef) shows "Plan prioritized … (remembered)"
         // and runs that template in one click; when OFF, the planner dialog always opens. The toggle alone is NOT
         // enough: with no saved template for a type its option stays the plain "Plan prioritized …" (opens the dialog),
-        // even while the toggle is on, so ON-by-default never one-clicks a plan the player never chose to remember.
+        // even while the toggle is on — so ON-by-default never one-clicks a plan the player never chose to remember.
         // Lives on the interface toggle only (not the settings window, hence not drawn there).
         public bool rememberPlan = true;
         public bool planCrafting = true; // station crafting planner (batch a bill N times in one go)
@@ -172,13 +172,13 @@ namespace HaulersDream
         // (HaulersDream_BatchCraft) Common Sense never patches, so it can run safely under CS. ON by default so
         // batch-flagged bills still batch under Common Sense; the looping inventory-gather and ingredient-share
         // paths stay ceded regardless. Turn OFF to hand the whole cook/craft flow to Common Sense (batching is
-        // then suppressed and its dropdown options are hidden, see CommonSenseCompat.BatchSuppressedByCommonSense).
+        // then suppressed and its dropdown options are hidden — see CommonSenseCompat.BatchSuppressedByCommonSense).
         public bool allowBatchUnderCommonSense = true;
 
         // --- bulk hauling (the native Pick-Up-And-Haul: a haul trip sweeps everything around into inventory) ---
         public bool bulkHaul = true;
         // Always = every haul sweeps; SecondTasked (default) = automatic hauls always sweep, but a player-ORDERED
-        // haul sweeps only when a second nearby haul has also been ordered, so ordering one haul stays surgical.
+        // haul sweeps only when a second nearby haul has also been ordered — so ordering one haul stays surgical.
         public BulkHaulTrigger bulkHaulTrigger = BulkHaulTrigger.SecondTasked;
         // The "Haul everything nearby" right-click order: start a bulk sweep directly (no need to prioritize two
         // hauls). Additive to vanilla "Prioritize hauling".
@@ -189,7 +189,7 @@ namespace HaulersDream
         // never a "black hole" even with auto-unload off. Additive to vanilla's right-click haul options.
         public bool manualPickupOption = true;
         // The "Keep X in inventory" float-menu order on a haulable ground item: take the clicked stack into the pawn's
-        // inventory and HOLD it, HD never hauls it to storage and vanilla's drop-unused never sheds it (the sibling
+        // inventory and HOLD it — HD never hauls it to storage and vanilla's drop-unused never sheds it (the sibling
         // of "Pick up X", which picks up to HAUL). For holding an item the pawn should carry (a mod's inventory item,
         // a caravan supply, a roleplay keepsake). Release it by consuming it or dropping it from the gear tab. Default
         // ON for discoverability; additive to vanilla's right-click options and shown alongside "Pick up X".
@@ -214,7 +214,7 @@ namespace HaulersDream
         public bool pickupDelayOnLoading = false;
         // Pacing opt-in for an ISOLATED harvest collected on the spot (a one-off "order → harvest" with no nearby
         // cluster; PickupDelayContext.DirectHarvest). Its OWN independent toggle, like pickupDelayOnHauling /
-        // pickupDelayOnLoading, the base magnitude (pickupDelayTicks > 0) is still required, but the hauling and
+        // pickupDelayOnLoading — the base magnitude (pickupDelayTicks > 0) is still required, but the hauling and
         // loading opt-ins do NOT affect it. Default OFF so a lone ordered harvest is collected snappily; turn it on
         // to show the pickup progress bar for those. A clustered field's sectioned sweep is unaffected (it uses the
         // AutoHaul context, gated on pickupDelayOnHauling).
@@ -226,28 +226,28 @@ namespace HaulersDream
         // Let a CORPSE haul behave like any other haul: it can sweep the loose items around it into the hauler's
         // inventory, and a nearby corpse can ride along on someone else's sweep. Vanilla routes corpses through a
         // SEPARATE work giver that HD never hooked, so corpse hauls were the one haul the bulk sweep never touched
-        //, a haul ordered on a meal picked up the corpse next to it, but a haul ordered on the corpse picked up
+        // — a haul ordered on a meal picked up the corpse next to it, but a haul ordered on the corpse picked up
         // nothing else. Default ON, for parity with item hauls. Carry weight still decides how much rides along,
         // so a 60 kg humanlike body is normally still a trip of its own; small animals batch. Requires bulkHaul.
         public bool bulkHaulCorpses = true;
         // Discount on what a BODY costs against the bulk-haul carry ceiling, so more than one can fit in a trip.
         // A humanlike corpse is 60 kg and a default colonist's ceiling is ~96 kg (35 kg carrying capacity × the
-        // "Fair" overload ratio), so two bodies never fit and the graveyard run is one body per trip, the Steam
+        // "Fair" overload ratio), so two bodies never fit and the graveyard run is one body per trip — the Steam
         // report behind this. At ×2.0 a body is BUDGETED as 30 kg, so two fit. THE TRADE-OFF, stated honestly:
         // this changes the accounting only, never the load. The pawn still physically carries the real 120 kg, so
         // it is still slowed as 120 kg, and the overload slider's "carry more, move slower" break-even no longer
-        // holds, the player is trading two fast trips for one slow one. That is exactly why it is opt-in.
+        // holds — the player is trading two fast trips for one slow one. That is exactly why it is opt-in.
         // ×1.0 = off, today's behavior unchanged. Requires bulkHaulCorpses.
         public float corpseCarryAllowance = 1.0f;
         // Heaviest single BODY (kg) that may take part in a bulk corpse haul; anything heavier is left to vanilla's
         // own one-body carry. Lets a colony batch the light animal bodies while heavy ones keep a trip each (a
-        // humanlike corpse is 60 kg; a muffalo or a thrumbo is heavier still). 0 = no limit, the default, and the
+        // humanlike corpse is 60 kg; a muffalo or a thrumbo is heavier still). 0 = no limit — the default, and the
         // same "0 means off" sentinel carryMassCapKg uses, so nothing changes until it is set.
         // Requires bulkHaulCorpses.
         public float corpseMaxHaulMassKg = 0f;
         // Whether HUMANLIKE (person) bodies may take part in a bulk corpse haul at all. Off keeps people out of
-        // batched hauls entirely, a colonist, guest or raider body is then always carried on its own, however the
-        // allowance and weight cap above are set, while animal and mech bodies still batch. For a colony that
+        // batched hauls entirely — a colonist, guest or raider body is then always carried on its own, however the
+        // allowance and weight cap above are set — while animal and mech bodies still batch. For a colony that
         // wants its dead handled one at a time but its hunt kills brought home together. Default ON = today's
         // behavior. Requires bulkHaulCorpses.
         public bool corpseHaulHumanlike = true;
@@ -255,12 +255,12 @@ namespace HaulersDream
         // not decorative: vanilla's HaulCorpses work giver leaves canBeDoneByMechs at its default true and a
         // Lifter's mechEnabledWorkTypes is exactly Hauling, so a work mech genuinely does haul bodies; vanilla's
         // animal haul job has no corpse exclusion either, so a Haul-trained colony animal does too. Each of these
-        // only NARROWS what its race is already allowed to do, allowMechanoids / allowAnimals still decide
+        // only NARROWS what its race is already allowed to do — allowMechanoids / allowAnimals still decide
         // whether that race runs HD at all, and turning one of these on can never bring back a race those turned
         // off. All default ON = today's behavior. Each requires bulkHaulCorpses.
         public bool corpseHaulByColonists = true;   // colonists and other humanlike haulers
-        public bool corpseHaulByMechs = true;       // player work mechanoids, narrows allowMechanoids
-        public bool corpseHaulByAnimals = true;     // Haul-trained colony animals, narrows allowAnimals
+        public bool corpseHaulByMechs = true;       // player work mechanoids — narrows allowMechanoids
+        public bool corpseHaulByAnimals = true;     // Haul-trained colony animals — narrows allowAnimals
 
         // "Haul Urgently" bulk pickup (Allow Tool / Keyz' Allow Utilities soft-dep). When a pawn is sent to
         // haul an item marked "Haul Urgently", also pocket the OTHER urgent-marked stacks within a small radius
@@ -304,7 +304,7 @@ namespace HaulersDream
         // --- Vehicle Framework (VF) compat. enableVehicleFramework is the MASTER: it gates only the NEW opt-in VF
         // features (the bulk-load-into-vehicle WorkGiver/float-menu/driver and the pack-animal event-correct deposit
         // redirect). It does NOT gate the safety/correctness guards (the [UC1]/[UC2] vehicle-skip and the MOW/ORG
-        // embarked-holder skip), those fix a PRE-EXISTING HD↔VF misfire and are gated on VehicleFrameworkCompat
+        // embarked-holder skip) — those fix a PRE-EXISTING HD↔VF misfire and are gated on VehicleFrameworkCompat
         // .IsActive ONLY, so a feature toggle can never switch the bug back on. A parked vehicle's cargo is NEVER
         // eaten / built / tended from at home (the [MOW]/[ORG]/[UC] vehicle-skips hold); the three away-only opt-ins
         // above (eatFromVehiclesAway / medicineFromVehiclesAway / buildFromVehiclesAway, all default OFF) relax that
@@ -315,7 +315,7 @@ namespace HaulersDream
         public bool enableVehicleFramework = true;
         public bool enableBulkLoadVehicles = true;
 
-        // --- Storage Network (BlackMouse) compat, EXPERIMENTAL, default OFF. SN is a virtual/digital storage whose
+        // --- Storage Network (BlackMouse) compat — EXPERIMENTAL, default OFF. SN is a virtual/digital storage whose
         // items are DESPAWNED inside its server/terminal buildings, so HD's normal bulk-load sweep (loose + spawned
         // storage) can't see them and a network-stored manifest degrades to vanilla one-stack loading. When this is
         // on AND SN is installed, HD adds the network's stacks to the bulk-load plan and lets SN's own on-demand
@@ -323,7 +323,7 @@ namespace HaulersDream
         // .IsActive). Opt-in because it depends on an alpha, closed-source mod's auto-spawn behaviour.
         public bool enableStorageNetworkBulkLoad = false;
 
-        // --- bulk REFUEL (replaces vanilla's one-stack-per-walk refuel of a CompRefuelable, a shuttle's chemfuel, a
+        // --- bulk REFUEL (replaces vanilla's one-stack-per-walk refuel of a CompRefuelable — a shuttle's chemfuel, a
         // deep drill, a generator, …): a hauler sweeps enough nearby fuel into inventory, walks to the refuelable
         // ONCE, and fills it in one trip. No shared manifest/ledger (vanilla CompRefuelable.Refuel just consumes up to
         // the deficit), so it's a standalone path; only fires when 2+ stacks/trips are needed (a single-stack refuel
@@ -389,12 +389,12 @@ namespace HaulersDream
         public TaintedApparelPolicy taintedNonSmeltablePolicy = TaintedApparelPolicy.Take;
 
         // --- haul after slaughter (a finished kill hauls the fresh carcass to storage so it doesn't rot) ---
-        public bool haulWildKills = true;       // hunted (wild) carcasses, appends a haul on the hunter ONLY when the hunt was interrupted after the kill (JobDriver_Hunt finish action, non-Succeeded); a clean hunt self-hauls (vanilla), so HD stays out, no double-haul
-        public bool haulTamedSlaughter = true;  // slaughtered (tamed) carcasses, appends a haul on the slaughterer (slaughter doesn't self-haul)
+        public bool haulWildKills = true;       // hunted (wild) carcasses — appends a haul on the hunter ONLY when the hunt was interrupted after the kill (JobDriver_Hunt finish action, non-Succeeded); a clean hunt self-hauls (vanilla), so HD stays out — no double-haul
+        public bool haulTamedSlaughter = true;  // slaughtered (tamed) carcasses — appends a haul on the slaughterer (slaughter doesn't self-haul)
 
         // --- spoiling-first ingredient selection (prefer the most-perishable already-valid candidate, to
         // reduce overall spoilage). Two independent toggles, both default ON. They only REORDER preference
-        // among already-valid candidates, never change recipe satisfaction, the bill's ingredientSearchRadius
+        // among already-valid candidates — never change recipe satisfaction, the bill's ingredientSearchRadius
         // / filters, or non-rottable crafts (steel/cloth/etc. are byte-identical). Among rottable+Fresh
         // candidates the one closest to spoiling (lowest CompRottable.TicksUntilRotAtCurrentTemp) is preferred. ---
         public bool butcherSpoilingFirst = true; // corpses chosen for a butcher bill: most-spoiled first
@@ -406,14 +406,14 @@ namespace HaulersDream
         public int overloadLevel = OverloadTuning.FairLevel;
 
         // Strict carry weight: never go past 100% capacity (overrides overload to off), and don't break
-        // off to unload when full, keep working and leave the surplus for normal hauling.
+        // off to unload when full — keep working and leave the surplus for normal hauling.
         public bool strictCarryWeight = false;
 
         // Keep working when full (opt-in, DEFAULT OFF so existing saves/behaviour are byte-identical until
         // opted in): when a pawn doing WORK (mining/harvesting/deconstructing) reaches its carry ceiling, it
-        // does NOT break off to unload, it keeps working and overflow yields drop on the ground for normal
+        // does NOT break off to unload — it keeps working and overflow yields drop on the ground for normal
         // hauling. It only sheds the load before a LONG relocation: when its next work target is farther than
-        // the dropoff (a weighted rule, see KeepWorkingPolicy). Downtime/idle/interval/end-of-run unloads
+        // the dropoff (a weighted rule — see KeepWorkingPolicy). Downtime/idle/interval/end-of-run unloads
         // are UNCHANGED, and dedicated haul/load jobs still deliver when full. Distinct from strictCarryWeight,
         // which also caps at 100% capacity (this keeps the overload-and-accumulate ceiling intact).
         public bool keepWorkingWhenFull = false;
@@ -425,9 +425,9 @@ namespace HaulersDream
         // Pass-by unload: when heading off on a long trip with a load and storage is on the way, drop it off.
         public bool opportunisticUnload = true;
 
-        // ===== While You're Up parity (C1, safety / strictly-better, default ON) =====
+        // ===== While You're Up parity (C1 — safety / strictly-better, default ON) =====
         // Don't START a new haul/scoop while a pawn is bleeding badly (it shouldn't detour into a sweep while
-        // hemorrhaging). Gates INTAKE ONLY, at the explicit scoop entry points, a pawn already carrying a load
+        // hemorrhaging). Gates INTAKE ONLY, at the explicit scoop entry points — a pawn already carrying a load
         // still unloads normally (never a "black hole"). OFF = vanilla HD (no health gate).
         public bool skipHaulWhileBleeding = true;
         // BleedRateTotal strictly above this (per-day rate) => unfit to start a haul. WYU parity = 0.001.
@@ -436,7 +436,7 @@ namespace HaulersDream
         // walking to the next), instead of the category->defName order. Strictly-better; ON. OFF = existing order.
         public bool closestDestinationUnloadOrder = true;
 
-        // ===== While You're Up parity (C2, en-route pickup, default ON) =====
+        // ===== While You're Up parity (C2 — en-route pickup, default ON) =====
         // The signature WYU mechanic: when a pawn is about to start a job, and a loose haulable lies roughly
         // ALONG the way, grab it into inventory first (as a tagged HD bulk-haul pickup, serviced by the normal
         // unload) so the stray item rides to storage on a trip the pawn was making anyway. A behavior-CHANGING
@@ -445,7 +445,7 @@ namespace HaulersDream
         // How strictly the "is the store roughly on the path?" check is confirmed after the cheap straight-line
         // ratio cascade. Vanilla = cheap bounded region-count flood (fastest, least accurate); Default / Pathfinding
         // = accurate A* path costs (Default ends the scan on a range failure, Pathfinding keeps scanning). DEFAULT
-        // Vanilla here (the perf-conscious choice, the A* modes are opt-in), unlike WYU's own Default default.
+        // Vanilla here (the perf-conscious choice — the A* modes are opt-in), unlike WYU's own Default default.
         public EnRoutePathChecker enRoutePathChecker = EnRoutePathChecker.Vanilla;
 
         // GRAB-ON-THE-WAY pickup detour: how far a pawn will step out of its way to grab a loose item it passes on
@@ -462,7 +462,7 @@ namespace HaulersDream
         // give a doctor progressively more room to drop off, trading a small deliberate surgery delay for fewer trips.
         public OpportunisticDetour unloadDetour = OpportunisticDetour.Short;
 
-        // ===== While You're Up parity (C3, consumer-aware storage routing, default ON) =====
+        // ===== While You're Up parity (C3 — consumer-aware storage routing, default ON) =====
         // "Haul before carry": before a pawn carries a resource to a build site / crafting bill, relocate the
         // largest nearby stack of that material to storage CLOSER to the consuming job (so future fetches are
         // short), and grab same-/equal-priority extras. A behavior-CHANGING feature; the MASTER ships ON (when
@@ -474,8 +474,8 @@ namespace HaulersDream
         public bool routeToEqualPriority = true;        // allow relocating into an EQUAL-priority store (not just higher)
         public bool routeToStockpiles = true;           // plain stockpile zones are eligible relocation targets
 
-        // ===== While You're Up parity (C4, storage building permit/deny filter, default ON) =====
-        // The SHARED filter (plan G4/G7): one object, one Scribe_Deep field, one dialog, read by en-route
+        // ===== While You're Up parity (C4 — storage building permit/deny filter, default ON) =====
+        // The SHARED filter (plan G4/G7): one object, one Scribe_Deep field, one dialog — read by en-route
         // (C2), before-carry routing (C3), and the permit/deny dialog (C4). MASTER toggle, default ON; when off,
         // StorageBuildingFilter.Enabled gates every query to allow-all and W3's funnel postfix early-returns
         // before any work, so the whole feature is fully inert when disabled.
@@ -484,12 +484,12 @@ namespace HaulersDream
         // = allow-all minus the slow set; before-carry = deny-all except a curated container allow-list.
         // When OFF, only the player's explicit overrides decide and everything else is allowed.
         public bool storageFilterUseDefaults = true;
-        // Deny the "slow" storage set (LWM's Deep Storage) for opportunistic / before-carry hauls, a storing
+        // Deny the "slow" storage set (LWM's Deep Storage) for opportunistic / before-carry hauls — a storing
         // DELAY there makes a stop not actually opportune. NEVER denies it for an unload (a carrying pawn must
         // always be able to put its load down). Inert under the OFF master.
         public bool storageFilterDenyLwmForOpportunistic = true;
         // The player's explicit per-building / per-mod overrides (deny beats allow beats the curated default).
-        // The ONE serialized filter object, never add a second. null on an old save -> new (allow-all).
+        // The ONE serialized filter object — never add a second. null on an old save -> new (allow-all).
         public StorageBuildingFilter storageBuildingFilter = new StorageBuildingFilter();
 
         // --- plan-route dialog ---
@@ -521,11 +521,11 @@ namespace HaulersDream
             routePrefsByDef[defName] = prefs;
         }
 
-        // Explicit "remembered" route templates, a SEPARATE layer from routePrefsByDef above. routePrefsByDef is the
+        // Explicit "remembered" route templates — a SEPARATE layer from routePrefsByDef above. routePrefsByDef is the
         // per-instance auto-restore the plan dialog writes on EVERY close (so the window reopens the way you left it);
         // these dictionaries are written ONLY when the player presses the "Remember" button in a plan dialog. Their
         // presence is what makes a specific type's right-click menu read "Plan prioritized … (remembered)" and run in
-        // one click, rememberPlan (the interface toggle) is the master switch that must ALSO be on. Keyed by the
+        // one click — rememberPlan (the interface toggle) is the master switch that must ALSO be on. Keyed by the
         // specific type: the target ThingDef (thing route), the growing zone's plant ThingDef (sow), or the clicked
         // cell's floor TerrainDef (remove-floor).
         public Dictionary<string, RouteDialogPrefs> rememberedRoutesByDef = new Dictionary<string, RouteDialogPrefs>();
@@ -572,7 +572,7 @@ namespace HaulersDream
         public float craftBatchTimeoutHours = 2f;   // default wall-clock cap for a batch (0 = no limit); per-batch overridable
 
         // --- work-incapability overrides (OFF = vanilla). When on, no backstory/trait/gene/title/role/
-        // hediff/quest incapability can block that work, for vanilla (work tab, prioritize, work scan)
+        // hediff/quest incapability can block that work — for vanilla (work tab, prioritize, work scan)
         // AND this mod's planners alike. See WorkOverride.
         public bool allPawnsCanHaul = false;
         public bool allPawnsCanClean = false;
@@ -582,13 +582,13 @@ namespace HaulersDream
         public bool pauseWhileDrafted = true;
         public bool allowMechanoids = true;
         // Multiplier on a player MECHANOID's carrying capacity for HD's hauling, so a modded high-capacity lifter
-        // mech hauls proportionally more per trip. 1.0 = the mech's true carrying capacity, unchanged (default, 
+        // mech hauls proportionally more per trip. 1.0 = the mech's true carrying capacity, unchanged (default —
         // byte-identical). Applied to the SINGLE capacity value both the overload ceiling and the move-speed
         // slowdown read (via CarryCapacity / PawnMassCache), so the "carry more / move slower" bargain stays in
         // lockstep. Only affects player work mechs. Under Combat Extended: at ×1.0 (default) HD stays inert and CE
-        // owns the mech's carry weight (issue #118, every language's description promised this); ONLY when raised
+        // owns the mech's carry weight (issue #118 — every language's description promised this); ONLY when raised
         // above ×1.0 does HD set the mech's CE carry weight to its carrying capacity × the multiplier (the opt-in
-        // #54 boost, see StatPart_MechCarryWeightCE).
+        // #54 boost — see StatPart_MechCarryWeightCE).
         public float mechHaulMultiplier = 1.0f;
         // Let colony hauling animals (not wild/enemy) scoop nearby loot into their inventory and run HD's
         // bulk-haul, the same way colonists do. Opt-in (default OFF) so the out-of-the-box scope stays
@@ -596,7 +596,7 @@ namespace HaulersDream
         public bool allowAnimals = false;
         // Let a pawn whose HAULING WORK TYPE is disabled ("incapable of dumb labor" and friends) take part in HD
         // anyway. Governs both sides: the AUTOMATIC scoop of its own work results (EligibilityPolicy) and, since
-        // #229, HD's haul / load / refuel RIGHT-CLICK ORDERS (HaulOrderGate), which used to check the
+        // #229, HD's haul / load / refuel RIGHT-CLICK ORDERS (HaulOrderGate) — which used to check the
         // WorkTags.Hauling bit a "dumb labor" backstory never sets, so they were offered regardless of this
         // setting. Default OFF = vanilla, which greys "Prioritize hauling" out for such a pawn.
         public bool allowIncapable = false;
@@ -608,40 +608,40 @@ namespace HaulersDream
         // integer order (which must match the UI segment order [Off, Drop & haul, To inventory]) is save-safe. ---
         public YieldBehavior yieldHarvest = YieldBehavior.DropThenHaul;     // crops / berries / food harvest
         public YieldBehavior yieldLogging = YieldBehavior.DropThenHaul;     // wood / cacti from felling trees
-        public YieldBehavior yieldMining = YieldBehavior.DropThenHaul;      // ore / resources, NOT stone chunks
+        public YieldBehavior yieldMining = YieldBehavior.DropThenHaul;      // ore / resources — NOT stone chunks
         public YieldBehavior yieldChunks = YieldBehavior.DropThenHaul;      // stone / slag chunks from mining
         public YieldBehavior yieldDeepDrill = YieldBehavior.DropThenHaul;   // deep-drill portions
         public YieldBehavior yieldDeconstruct = YieldBehavior.DropThenHaul; // deconstruction salvage
         public YieldBehavior yieldAnimals = YieldBehavior.DropThenHaul;     // milk / wool / animal products
         public YieldBehavior yieldStrip = YieldBehavior.DropThenHaul;       // gear removed by a strip order (always drop-then-haul; UI hides the "to inventory" option)
-        public YieldBehavior yieldUninstall = YieldBehavior.DropThenHaul;   // the minified building from an uninstall order, scooped (non-home maps only, see YieldRouter) so it batches onto pack animals in one caravan-load trip
-        // Fish catch (Odyssey fishing), the colonist JobDriver_Fish (NOT JobDriver_FishAnimal, which is a hungry
+        public YieldBehavior yieldUninstall = YieldBehavior.DropThenHaul;   // the minified building from an uninstall order — scooped (non-home maps only, see YieldRouter) so it batches onto pack animals in one caravan-load trip
+        // Fish catch (Odyssey fishing) — the colonist JobDriver_Fish (NOT JobDriver_FishAnimal, which is a hungry
         // animal feeding itself). A BRAND-NEW category with no legacy boolean to migrate, so MigrateLegacyYieldSettings
         // deliberately leaves it alone: on an old save the absent yieldFishing node simply stays at this
         // field-initializer default (DropThenHaul). The UI row is shown only when ModsConfig.OdysseyActive (the
         // fishing mechanic needs the Odyssey DLC).
-        public YieldBehavior yieldFishing = YieldBehavior.DropThenHaul;     // fish catch (Odyssey fishing), JobDriver_Fish
+        public YieldBehavior yieldFishing = YieldBehavior.DropThenHaul;     // fish catch (Odyssey fishing) — JobDriver_Fish
 
         // Settings schema version. 1 = the per-category yieldX model; "0" is not a real schema, it is the sentinel
         // the LOAD path uses for "this node predates the stamp" (see the Scribe default below). [ProfileMeta]: it is
         // serialized plumbing, NOT a user-facing tunable, so the profile system must ignore it when comparing a
-        // config against the defaults (the on-load stamp to 1 would otherwise read a pristine config as "Custom"), 
+        // config against the defaults (the on-load stamp to 1 would otherwise read a pristine config as "Custom") —
         // which also means CopySettings never propagates it into a profile snapshot.
         //
         // The FIELD INITIALIZER is deliberately CurrentSettingsSchema, NOT the Scribe default of 0 (issue #238): a
-        // freshly CONSTRUCTED settings object is by definition already in the current schema, a fresh install
+        // freshly CONSTRUCTED settings object is by definition already in the current schema — a fresh install
         // (LoadedModManager.ReadModSettings returns `new T()` WITHOUT calling ExposeData when no config file
         // exists), a profile snapshot from CaptureSnapshot, an imported profile from DefaultsForVersion. Leaving it
         // at 0 made every one of those write NO stamp node (Scribe_Values.Look omits a value equal to its default)
         // and therefore re-run the legacy migration on every launch, wiping the nine yield settings. This does NOT
         // hide a genuine legacy config: Scribe_Values.Look ASSIGNS unconditionally on load, so an absent node still
         // overwrites this initializer with the Scribe default 0. The field==Scribe==Reset drift triple does not
-        // apply here, [ProfileMeta] fields are exempt (see scripts/check-settings-drift.ts META_FIELDS).
+        // apply here — [ProfileMeta] fields are exempt (see scripts/check-settings-drift.ts META_FIELDS).
         [ProfileMeta] public int settingsSchemaVersion = CurrentSettingsSchema;
         private const int CurrentSettingsSchema = 1;
 
         // The pre-#79 node labels MigrateLegacyYieldSettings reads. This list and the migration's own
-        // Scribe_Values.Look labels must never diverge, a label the migration reads but the probe omits means a
+        // Scribe_Values.Look labels must never diverge — a label the migration reads but the probe omits means a
         // config carrying only that node silently stops migrating. scripts/check-settings-drift.ts compares the
         // two and fails the build on any difference, so the pairing is enforced rather than hoped for.
         private static readonly string[] LegacyYieldNodeLabels =
@@ -654,12 +654,12 @@ namespace HaulersDream
         // The "settle" window: how long after its LAST pickup a pawn keeps accumulating before an automatic
         // unload trip. Default 2500 ticks (~1 in-game hour) so a pawn that is actively mining/deconstructing/
         // harvesting keeps scooping into inventory across the whole work run (each scoop resets the clock) and
-        // only trips to storage once it's been done with that work for a while, or sooner if it fills up to
+        // only trips to storage once it's been done with that work for a while — or sooner if it fills up to
         // the smart-overload ceiling. A small value (the old 60 = ~1s) made pawns unload after almost every
         // item. Gates the idle backstop + interval (via UnloadPolicy.Decide) and the end-of-run trigger.
         public int unloadGraceTicks = 2500;
         // Periodic unload backstop; 0 = off. 1h: with the primary triggers (end of work run, meal/joy
-        // checkpoints, over-encumbered, pass-by) this rarely fires, but when every one of them is
+        // checkpoints, over-encumbered, pass-by) this rarely fires — but when every one of them is
         // swallowed (drafts clearing the queue, lord duties, modded jobs), an hour is the longest a
         // pawn carries a load, not a quarter of a day. (Scribe omits a field that equals the default at
         // save time, so an old save left on the previous 6h default has no stored value and loads as 1h;
@@ -674,7 +674,7 @@ namespace HaulersDream
         public bool nonHomeMapsPlayerControlledOnly = false;
 
         // --- black-hole safety net: a red (critical) alert when a pawn is carrying scooped haul items it
-        // cannot put away, nowhere on the map accepts them (no stockpile / dumping zone / reachable cell),
+        // cannot put away — nowhere on the map accepts them (no stockpile / dumping zone / reachable cell),
         // or it has held tagged items far longer than any normal unload should take (storage unreachable,
         // or another mod keeps cancelling the haul/unload job). One alert for all such pawns. ---
         public bool alertCannotUnload = true;
@@ -684,15 +684,15 @@ namespace HaulersDream
         // --- misc ---
         public bool hideGizmo = false;
         // Show the per-pawn "Auto-haul yields" toggle gizmo on each eligible pawn. Default OFF (the toggle is
-        // HIDDEN), out of the box pawns auto-haul and the selection bar stays uncluttered. Turn this ON to expose
+        // HIDDEN) — out of the box pawns auto-haul and the selection bar stays uncluttered. Turn this ON to expose
         // the per-pawn toggle so you can stop individual pawns from auto-hauling (their CompHauledToInventory
         // .autoHaulYields preference still applies whether or not the gizmo is shown).
         public bool showAutoHaulGizmo = false;
-        // Show the per-bench "Gather ingredients" toggle gizmo on each workbench (issue #230). Default ON, the
+        // Show the per-bench "Gather ingredients" toggle gizmo on each workbench (issue #230). Default ON — the
         // switch is the whole point of the feature and is useless if it cannot be found. VISIBILITY ONLY: a bench
         // the player has already switched off STAYS off whether or not the button is shown, so hiding the control
         // can never silently re-enable gathering somewhere the player turned it off. (Common Sense does the
-        // opposite with its own bench toggle, it ignores the per-bench flag while its gizmo setting is off. HD's
+        // opposite with its own bench toggle — it ignores the per-bench flag while its gizmo setting is off. HD's
         // convention is the safe one and is the one to follow.)
         public bool showBenchGatherGizmo = true;
         public bool verboseLogging = false;
@@ -706,7 +706,7 @@ namespace HaulersDream
         // --- settings profiles (named presets) ---
         // Default = the built-in defaults (immutable; selecting it acts as "reset"). A named profile stores a full
         // snapshot of every setting; the selector shows "Custom (unsaved)" when the live values differ from the
-        // active baseline. Profiles are USER DATA, ResetToDefaults never deletes them, so they're [ProfileMeta]
+        // active baseline. Profiles are USER DATA — ResetToDefaults never deletes them, so they're [ProfileMeta]
         // (excluded from the field==Scribe==Reset drift triple). See SettingsProfiles.cs for the logic.
         [ProfileMeta] public List<SettingsProfile> savedProfiles = new List<SettingsProfile>();
         [ProfileMeta] public string activeProfileName = "";
@@ -894,7 +894,7 @@ namespace HaulersDream
             Scribe_Values.Look(ref routeDistanceBasis, "routeDistanceBasis", RouteDistanceBasis.StraightLine);
             Scribe_Values.Look(ref routeOrderExactMax, "routeOrderExactMax", RouteOrderPolicy.ExactMax);
             // A hand-edited config with k ≥ 22 would make the Held-Karp solver allocate gigabytes (2^k·k
-            // arrays) or overflow at k ≥ 31, clamp on load (RouteOrderPolicy.Order re-clamps as the backstop).
+            // arrays) or overflow at k ≥ 31 — clamp on load (RouteOrderPolicy.Order re-clamps as the backstop).
             routeOrderExactMax = Mathf.Clamp(routeOrderExactMax, 1, 16);
             Scribe_Values.Look(ref craftBatchTimeoutHours, "craftBatchTimeoutHours", 2f);
             Scribe_Collections.Look(ref routePrefsByDef, "routePrefsByDef", LookMode.Value, LookMode.Deep);
@@ -926,19 +926,19 @@ namespace HaulersDream
             Scribe_Values.Look(ref yieldUninstall, "yieldUninstall", YieldBehavior.DropThenHaul);
             Scribe_Values.Look(ref yieldFishing, "yieldFishing", YieldBehavior.DropThenHaul);
             // The Scribe default is 0 = "this node carries no stamp", which is NOT the field initializer
-            // (CurrentSettingsSchema, see the field). Look assigns unconditionally on load, so an absent node
+            // (CurrentSettingsSchema — see the field). Look assigns unconditionally on load, so an absent node
             // reliably yields 0 here even though a constructed object starts at CurrentSettingsSchema.
             Scribe_Values.Look(ref settingsSchemaVersion, "settingsSchemaVersion", 0);
             // One-time migration of the pre-#79 per-work bools + global pickupMode into the 9 LEGACY yieldX values
-            // (yieldFishing is a newer category with no legacy bool, it is left at its field default, never migrated).
+            // (yieldFishing is a newer category with no legacy bool — it is left at its field default, never migrated).
             //
             // Issue #238: this used to be guarded on the stamp ALONE (settingsSchemaVersion < 1), which re-ran the
-            // migration, and so overwrote the nine values Scribe just loaded above, on every launch for any node
+            // migration — and so overwrote the nine values Scribe just loaded above — on every launch for any node
             // that carries no stamp. That is EVERY profile snapshot (CopySettings skips [ProfileMeta], so a
             // snapshot's stamp never left 0 and was therefore never written) and any live config that has not yet
             // survived one load plus one write. The guard now asks the DATA: migrate only when the node being
             // loaded actually CONTAINS a legacy node. A legacy config whose 8 legacy values were all at their old
-            // defaults needs no migration either, MapLegacyYield(true, DropThenHaul, …) returns DropThenHaul,
+            // defaults needs no migration either — MapLegacyYield(true, DropThenHaul, …) returns DropThenHaul,
             // which is already the field default (pinned by WorkTypePolicyTests).
             if (Scribe.mode == LoadSaveMode.LoadingVars)
             {
@@ -1130,7 +1130,7 @@ namespace HaulersDream
             // Issue #238: a reset config IS at the current schema (the ten yieldX fields are set to their current
             // defaults right above), so stamp it. Setting 0 here made a post-reset config write NO stamp node
             // (Scribe omits a value equal to its default) and re-run the legacy migration on the next launch,
-            // wiping whatever yield settings the player chose after the reset. Also covers DefaultsForVersion, 
+            // wiping whatever yield settings the player chose after the reset. Also covers DefaultsForVersion —
             // the base for every IMPORTED profile snapshot. [ProfileMeta], so the field==Scribe==Reset drift
             // triple does not apply (scripts/check-settings-drift.ts META_FIELDS).
             settingsSchemaVersion = CurrentSettingsSchema;
@@ -1185,7 +1185,7 @@ namespace HaulersDream
         public bool RuleProducesSurplus(ThingDef def)
             => def != null && RuleMap.TryGetValue(def.defName, out var r) && r.mode != ItemUnloadMode.KeepAll;
 
-        /// <summary>True if ANY per-item rule can create unload surplus (keep-at-most / always-unload), the cheap
+        /// <summary>True if ANY per-item rule can create unload surplus (keep-at-most / always-unload) — the cheap
         /// gate for "run the surplus-adoption pass even with the global toggle off".</summary>
         public bool HasAnySurplusProducingRule
         {
@@ -1255,7 +1255,7 @@ namespace HaulersDream
         /// <summary>
         /// True when the XML node currently being loaded actually contains at least one pre-#79 legacy yield node.
         /// This is the same lookup Scribe_Values.Look performs internally (Scribe.loader.curXmlParent[label]), and
-        /// ScribeExtractor.SaveableFromNode re-points curXmlParent at the nested node around a deep load, so this
+        /// ScribeExtractor.SaveableFromNode re-points curXmlParent at the nested node around a deep load — so this
         /// correctly reads the top-level ModSettings node for the live settings and a profile's own &lt;snapshot&gt;
         /// node for a snapshot. Only meaningful during LoadingVars; false everywhere else.
         /// </summary>
@@ -1279,7 +1279,7 @@ namespace HaulersDream
         // an off toggle -> Disabled, an on toggle -> the old global pickup mode (Drop/Direct); Strip was ALWAYS
         // drop-then-haul, so it ignores the global mode (forceDropOnly). The split categories inherit their parent's
         // legacy toggle (Logging<-haulHarvest, Chunks<-haulMining), matching the pre-split behavior exactly. On a
-        // brand-new state the old nodes are absent, so every local reads its old default and maps to DropThenHaul, 
+        // brand-new state the old nodes are absent, so every local reads its old default and maps to DropThenHaul —
         // identical to the field initializers, so a fresh install is unaffected. Mirrors the keepDefNames idiom.
         private void MigrateLegacyYieldSettings()
         {
